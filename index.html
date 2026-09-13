@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Franchise Adzopé — Suivi Commercial</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-badge">FA</span>
+    <div>
+      <div class="brand-title" id="brandTitle">TEAM FRANCHISE ADZOPÉ</div>
+      <div class="brand-sub">Suivi objectifs &amp; abonnements 4G Home</div>
+    </div>
+  </div>
+  <nav class="tabs" id="tabs">
+    <button class="tab active" data-tab="dashboard">Tableau de bord</button>
+    <button class="tab" data-tab="objectifs">Objectifs</button>
+    <button class="tab" data-tab="abonnements">Abonnements 4G Home</button>
+    <button class="tab" data-tab="equipe">Équipe &amp; Points de vente</button>
+    <button class="tab" data-tab="export">Export / Sauvegarde</button>
+  </nav>
+</header>
+
+<main id="view"></main>
+
+<footer class="footer">
+  Données enregistrées localement dans ce navigateur — pensez à exporter une sauvegarde régulièrement (onglet Export / Sauvegarde).
+</footer>
+
+<div id="modalRoot"></div>
+
+<script src="vendor/xlsx.full.min.js"></script>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
