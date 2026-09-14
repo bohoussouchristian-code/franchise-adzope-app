@@ -9,8 +9,8 @@ export function renderObjectifs(root, state, actions) {
 
   const wrap = document.createElement('div');
   wrap.innerHTML = `
-    <h1 class="page-title">Objectifs mensuels</h1>
-    <p class="page-sub">Saisissez l'objectif du mois et les ventes réalisées par semaine, pour chaque produit.</p>
+    <h1 class="page-title">Fiche d'objectifs mensuels</h1>
+    <p class="page-sub">Un formulaire par produit : indiquez l'objectif du mois, puis les ventes réalisées chaque semaine.</p>
 
     <div class="toolbar">
       <label class="field">Année
@@ -25,7 +25,7 @@ export function renderObjectifs(root, state, actions) {
     </div>
 
     ${state.agents.length === 0 ? `<div class="empty-state">Ajoutez d'abord un vendeur dans l'onglet « Équipe &amp; Points de vente ».</div>` : ''}
-    <div id="tableHost"></div>
+    <div id="formHost" class="obj-form-grid"></div>
   `;
   root.appendChild(wrap);
 
@@ -63,58 +63,13 @@ export function renderObjectifs(root, state, actions) {
   agentSel.addEventListener('change', (e) => { ui.agentId = e.target.value; actions.rerender(); });
 
   const mKey = monthKey(ui.year, ui.month);
-  const host = wrap.querySelector('#tableHost');
-  host.appendChild(buildTable(state, actions, mKey));
-}
-
-function buildTable(state, actions, mKey) {
-  const box = document.createElement('div');
-  box.className = 'table-wrap';
-  const table = document.createElement('table');
-  table.innerHTML = `
-    <thead>
-      <tr>
-        <th>Produit</th>
-        <th>Objectif / mois</th>
-        <th>Semaine 1</th>
-        <th>Semaine 2</th>
-        <th>Semaine 3</th>
-        <th>Semaine 4</th>
-        <th>Total réalisé</th>
-        <th>GAP</th>
-        <th>%</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  `;
-  const tbody = table.querySelector('tbody');
+  const host = wrap.querySelector('#formHost');
 
   state.products.forEach((p) => {
-    const r = computeProductMonth(state, ui.agentId, p.id, mKey);
-    const tr = document.createElement('tr');
-    const cls = pctClass(r.pct);
-
-    const objCell = `<input type="number" min="0" class="obj-input" value="${r.objective}" data-product="${p.id}">`;
-
-    let weekCells;
-    if (p.autoFromRegistry) {
-      weekCells = r.weeks.map((w) => `<td class="right muted">${fmtNum(w)}</td>`).join('');
-    } else {
-      weekCells = r.weeks.map((w, i) => `<td><input type="number" min="0" class="week-input" value="${w}" data-product="${p.id}" data-week="${i}"></td>`).join('');
-    }
-
-    tr.innerHTML = `
-      <td>${p.name}${p.autoFromRegistry ? ' <span class="small muted">(auto, registre)</span>' : ''}</td>
-      <td>${objCell}</td>
-      ${weekCells}
-      <td class="right"><b>${fmtNum(r.realized)}</b></td>
-      <td class="right">${r.gap >= 0 ? '+' : ''}${fmtNum(r.gap)}</td>
-      <td><span class="pill ${cls}">${fmtPct(r.pct)}</span></td>
-    `;
-    tbody.appendChild(tr);
+    host.appendChild(buildProductForm(state, actions, p, mKey));
   });
 
-  table.addEventListener('change', (e) => {
+  host.addEventListener('change', (e) => {
     const productId = e.target.dataset.product;
     if (!productId) return;
     if (e.target.classList.contains('obj-input')) {
@@ -124,7 +79,52 @@ function buildTable(state, actions, mKey) {
       actions.commit((s) => setWeekActual(s, ui.agentId, productId, mKey, w, e.target.value));
     }
   });
+}
 
-  box.appendChild(table);
-  return box;
+function buildProductForm(state, actions, product, mKey) {
+  const r = computeProductMonth(state, ui.agentId, product.id, mKey);
+  const cls = pctClass(r.pct);
+  const width = r.pct === null ? 0 : Math.min(100, Math.round(r.pct * 100));
+
+  const card = document.createElement('div');
+  card.className = 'obj-card';
+
+  const weeksHtml = product.autoFromRegistry
+    ? r.weeks.map((w, i) => `
+        <div class="obj-week-field">
+          <label>Semaine ${i + 1}</label>
+          <div class="obj-week-readonly">${fmtNum(w)}</div>
+        </div>
+      `).join('')
+    : r.weeks.map((w, i) => `
+        <div class="obj-week-field">
+          <label>Semaine ${i + 1}</label>
+          <input type="number" min="0" class="week-input" value="${w}" data-product="${product.id}" data-week="${i}">
+        </div>
+      `).join('');
+
+  card.innerHTML = `
+    <div class="obj-card-head">
+      <div>
+        <div class="obj-card-title">${product.name}</div>
+        ${product.autoFromRegistry ? '<span class="pill neutral">Calculé depuis le registre</span>' : `<span class="muted small">Unité : ${product.unit}</span>`}
+      </div>
+      <span class="pill ${cls}">${fmtPct(r.pct)}</span>
+    </div>
+
+    <div class="obj-field-obj">
+      <label>Objectif du mois</label>
+      <input type="number" min="0" class="obj-input" value="${r.objective}" data-product="${product.id}">
+    </div>
+
+    <div class="obj-weeks-row">${weeksHtml}</div>
+
+    <div class="bar-track"><div class="bar-fill ${cls}" style="width:${width}%"></div></div>
+
+    <div class="obj-card-foot">
+      <span>Réalisé <b>${fmtNum(r.realized)}</b></span>
+      <span>GAP <b>${r.gap >= 0 ? '+' : ''}${fmtNum(r.gap)}</b></span>
+    </div>
+  `;
+  return card;
 }
