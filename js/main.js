@@ -3,7 +3,7 @@ import { renderDashboard } from './ui-dashboard.js';
 import { renderBilan } from './ui-bilan.js';
 import { renderObjectifsSuivi, renderObjectifsHistorique } from './ui-objectifs.js';
 import { renderEvaluations, renderOutlets } from './ui-notation.js';
-import { renderAbonnements } from './ui-abonnements.js';
+import { renderNouvelAbonnement, renderHistoriqueAbonnements } from './ui-abonnements.js';
 import { renderEquipeVendeurs, renderEquipePointsDeVente } from './ui-equipe.js';
 import { renderExport } from './ui-export.js';
 import { renderParametres } from './ui-parametres.js';
@@ -30,7 +30,8 @@ const pages = {
   'objectifs-historique': renderObjectifsHistorique,
   'objectifs-evaluation': renderEvaluations,
   'objectifs-outlets': renderOutlets,
-  abonnements: renderAbonnements,
+  'abonnements-nouveau': renderNouvelAbonnement,
+  'abonnements-historique': renderHistoriqueAbonnements,
   'equipe-vendeurs': renderEquipeVendeurs,
   'equipe-points': renderEquipePointsDeVente,
   export: renderExport,

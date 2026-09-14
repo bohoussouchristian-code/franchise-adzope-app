@@ -3,7 +3,7 @@ import { addSubscription, updateSubscription, removeSubscription } from './store
 import { openModal, closeModal } from './modal.js';
 
 let ui = {
-  year: null,
+  year: 'ALL',
   month: 'ALL', // 'ALL' or 0..11
   type: 'ALL', // ALL | TDD | FDD
   agentId: 'ALL',
@@ -11,17 +11,98 @@ let ui = {
   search: '',
 };
 
-export function renderAbonnements(root, state, actions) {
-  if (ui.year === null) ui.year = state.meta.year;
+// ---------- Page : Nouvelle abonnement ----------
+
+export function renderNouvelAbonnement(root, state, actions) {
+  const agentOptions = state.agents.map((a) => `<option value="${a.id}">${escapeHtml(a.name)}</option>`).join('');
+  const outletOptions = state.outlets.map((o) => `<option value="${o.id}">${escapeHtml(o.name)}</option>`).join('');
 
   const wrap = document.createElement('div');
   wrap.innerHTML = `
-    <h1 class="page-title">Registre des abonnements 4G Home</h1>
-    <p class="page-sub">Chaque abonnement enregistré ici alimente automatiquement les objectifs 4G Home du tableau de bord.</p>
+    <h1 class="page-title">Nouvel abonnement 4G Home</h1>
+    <p class="page-sub">Chaque abonnement enregistré ici alimente automatiquement les objectifs 4G Home et apparaît dans l'historique.</p>
+
+    <div class="card">
+      <form id="subForm">
+        <div class="form-grid">
+          <label class="field">Date de création
+            <input type="date" name="dateCreation" value="${todayISO()}" required>
+          </label>
+          <label class="field">Type d'abonnement
+            <select name="type">
+              <option value="TDD">TDD (Flybox)</option>
+              <option value="FDD">FDD (Easybox)</option>
+            </select>
+          </label>
+          <label class="field">Vendeur
+            <select name="agentId"><option value="">—</option>${agentOptions}</select>
+          </label>
+          <label class="field">Point de vente
+            <select name="outletId"><option value="">—</option>${outletOptions}</select>
+          </label>
+          <label class="field full">Nom du client
+            <input type="text" name="infoClient" placeholder="NOM, Prénoms" required>
+          </label>
+          <label class="field">N° client
+            <input type="text" name="numeroClient">
+          </label>
+          <label class="field">Numéro fixe (ND)
+            <input type="text" name="numeroFixe">
+          </label>
+          <label class="field">Référence facture
+            <input type="text" name="referenceFacture">
+          </label>
+          <label class="field">Coût facture initiale (F CFA)
+            <input type="number" min="0" name="coutFactureInitiale">
+          </label>
+          <label class="field">Login de saisie
+            <input type="text" name="loginSaisie">
+          </label>
+          <label class="field">Login paiement
+            <input type="text" name="loginPaiement">
+          </label>
+          <label class="field">Date dépôt des avantages
+            <input type="date" name="dateDepotAvantages" value="${todayISO()}">
+          </label>
+          <label class="field">Mode de paiement
+            <input type="text" name="modePaiement" placeholder="OM, Espèce, réf. mobile money...">
+          </label>
+        </div>
+        <div class="modal-actions">
+          <button type="submit" class="btn btn-primary" ${state.agents.length ? '' : 'disabled'}>Ajouter l'abonnement</button>
+        </div>
+      </form>
+    </div>
+  `;
+  root.appendChild(wrap);
+
+  if (!state.agents.length) {
+    const note = document.createElement('p');
+    note.className = 'small muted';
+    note.textContent = "Ajoutez d'abord un vendeur dans « Équipe & Points de vente » pour pouvoir enregistrer un abonnement.";
+    wrap.querySelector('#subForm').before(note);
+  }
+
+  wrap.querySelector('#subForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const data = Object.fromEntries(fd.entries());
+    actions.commit((s) => addSubscription(s, data));
+    actions.goTo('abonnements-historique');
+  });
+}
+
+// ---------- Page : Historique des abonnements ----------
+
+export function renderHistoriqueAbonnements(root, state, actions) {
+  const wrap = document.createElement('div');
+  wrap.innerHTML = `
+    <h1 class="page-title">Historique des abonnements</h1>
+    <p class="page-sub">Retrace tous les abonnements 4G Home enregistrés, filtrables par année, mois, type, vendeur et point de vente.</p>
 
     <div class="toolbar">
       <label class="field">Année
-        <select id="fYear"></select>
+        <select id="fYear"><option value="ALL">Toutes</option></select>
       </label>
       <label class="field">Mois
         <select id="fMonth"><option value="ALL">Tous les mois</option></select>
@@ -40,10 +121,8 @@ export function renderAbonnements(root, state, actions) {
         <select id="fOutlet"><option value="ALL">Tous</option></select>
       </label>
       <label class="field">Recherche
-        <input type="search" id="fSearch" placeholder="Nom, n° client, facture..." value="${escapeHtml(ui.search)}">
+        <input type="search" id="fSearch" placeholder="Nom, n° client, n° facture..." value="${escapeHtml(ui.search)}">
       </label>
-      <div style="flex:1"></div>
-      <button class="btn btn-primary" id="btnAdd">+ Nouvel abonnement</button>
     </div>
 
     <div id="recap" class="grid-cards"></div>
@@ -51,59 +130,51 @@ export function renderAbonnements(root, state, actions) {
   `;
   root.appendChild(wrap);
 
+  const years = new Set();
+  state.subscriptions4gHome.forEach((s) => {
+    if (s.dateCreation) years.add(Number(s.dateCreation.slice(0, 4)));
+  });
+  if (state.meta.year) years.add(state.meta.year);
+
   const yearSel = wrap.querySelector('#fYear');
-  [state.meta.year, ui.year, new Date().getFullYear()]
-    .filter((v, i, a) => a.indexOf(v) === i).sort()
-    .forEach((y) => {
-      const o = document.createElement('option');
-      o.value = y; o.textContent = y;
-      if (y === ui.year) o.selected = true;
-      yearSel.appendChild(o);
-    });
+  [...years].sort((a, b) => b - a).forEach((y) => addOption(yearSel, y, y, String(y) === String(ui.year)));
 
   const monthSel = wrap.querySelector('#fMonth');
-  MONTH_NAMES_FR.forEach((m, i) => {
-    const o = document.createElement('option');
-    o.value = i; o.textContent = m;
-    if (String(ui.month) === String(i)) o.selected = true;
-    monthSel.appendChild(o);
-  });
+  MONTH_NAMES_FR.forEach((m, i) => addOption(monthSel, i, m, String(ui.month) === String(i)));
 
   const agentSel = wrap.querySelector('#fAgent');
-  state.agents.forEach((a) => {
-    const o = document.createElement('option');
-    o.value = a.id; o.textContent = a.name;
-    if (a.id === ui.agentId) o.selected = true;
-    agentSel.appendChild(o);
-  });
+  state.agents.forEach((a) => addOption(agentSel, a.id, a.name, a.id === ui.agentId));
 
   const outletSel = wrap.querySelector('#fOutlet');
-  state.outlets.forEach((o2) => {
-    const o = document.createElement('option');
-    o.value = o2.id; o.textContent = o2.name;
-    if (o2.id === ui.outletId) o.selected = true;
-    outletSel.appendChild(o);
-  });
+  state.outlets.forEach((o) => addOption(outletSel, o.id, o.name, o.id === ui.outletId));
 
   wrap.querySelector('#fType').value = ui.type;
 
-  wrap.querySelector('#fYear').addEventListener('change', (e) => { ui.year = Number(e.target.value); actions.rerender(); });
+  wrap.querySelector('#fYear').addEventListener('change', (e) => { ui.year = e.target.value === 'ALL' ? 'ALL' : Number(e.target.value); actions.rerender(); });
   wrap.querySelector('#fMonth').addEventListener('change', (e) => { ui.month = e.target.value === 'ALL' ? 'ALL' : Number(e.target.value); actions.rerender(); });
   wrap.querySelector('#fType').addEventListener('change', (e) => { ui.type = e.target.value; actions.rerender(); });
   wrap.querySelector('#fAgent').addEventListener('change', (e) => { ui.agentId = e.target.value; actions.rerender(); });
   wrap.querySelector('#fOutlet').addEventListener('change', (e) => { ui.outletId = e.target.value; actions.rerender(); });
   wrap.querySelector('#fSearch').addEventListener('input', (e) => { ui.search = e.target.value; renderList(wrap, state, actions); });
-  wrap.querySelector('#btnAdd').addEventListener('click', () => openForm(state, actions, null));
 
   renderList(wrap, state, actions);
+}
+
+function addOption(select, value, label, selected) {
+  const o = document.createElement('option');
+  o.value = value;
+  o.textContent = label;
+  if (selected) o.selected = true;
+  select.appendChild(o);
 }
 
 function filteredSubs(state) {
   const q = ui.search.trim().toLowerCase();
   return state.subscriptions4gHome.filter((s) => {
-    if (!s.dateCreation) return false;
-    if (!s.dateCreation.startsWith(String(ui.year))) return false;
-    if (ui.month !== 'ALL' && s.dateCreation.slice(5, 7) !== String(ui.month + 1).padStart(2, '0')) return false;
+    if (ui.year !== 'ALL') {
+      if (!s.dateCreation || !s.dateCreation.startsWith(String(ui.year))) return false;
+    }
+    if (ui.month !== 'ALL' && (!s.dateCreation || s.dateCreation.slice(5, 7) !== String(ui.month + 1).padStart(2, '0'))) return false;
     if (ui.type !== 'ALL' && s.type !== ui.type) return false;
     if (ui.agentId !== 'ALL' && s.agentId !== ui.agentId) return false;
     if (ui.outletId !== 'ALL' && s.outletId !== ui.outletId) return false;
@@ -140,7 +211,7 @@ function renderList(wrap, state, actions) {
   host.innerHTML = '';
 
   if (!subs.length) {
-    host.innerHTML = `<div class="empty-state">Aucun abonnement pour ces filtres. Cliquez sur « + Nouvel abonnement » pour en ajouter un.</div>`;
+    host.innerHTML = `<div class="empty-state">Aucun abonnement pour ces filtres.</div>`;
     return;
   }
 
@@ -195,7 +266,7 @@ function renderList(wrap, state, actions) {
     const delId = e.target.dataset.del;
     if (editId) {
       const rec = state.subscriptions4gHome.find((r) => r.id === editId);
-      openForm(state, actions, rec);
+      openEditForm(state, actions, rec);
     } else if (delId) {
       if (confirm('Supprimer cet abonnement ? Cette action est irréversible.')) {
         actions.commit((s) => removeSubscription(s, delId));
@@ -207,19 +278,13 @@ function renderList(wrap, state, actions) {
   host.appendChild(box);
 }
 
-function openForm(state, actions, rec) {
-  const isEdit = !!rec;
-  const agentOptions = state.agents.map((a) => `<option value="${a.id}" ${rec && rec.agentId === a.id ? 'selected' : ''}>${escapeHtml(a.name)}</option>`).join('');
-  const outletOptions = state.outlets.map((o) => `<option value="${o.id}" ${rec && rec.outletId === o.id ? 'selected' : ''}>${escapeHtml(o.name)}</option>`).join('');
-
-  const v = rec || {
-    dateCreation: todayISO(), agentId: state.agents[0]?.id || '', outletId: state.outlets[0]?.id || '',
-    loginSaisie: '', loginPaiement: '', dateDepotAvantages: todayISO(), type: 'TDD',
-    numeroClient: '', numeroFixe: '', infoClient: '', referenceFacture: '', coutFactureInitiale: '', modePaiement: '',
-  };
+function openEditForm(state, actions, rec) {
+  const agentOptions = state.agents.map((a) => `<option value="${a.id}" ${rec.agentId === a.id ? 'selected' : ''}>${escapeHtml(a.name)}</option>`).join('');
+  const outletOptions = state.outlets.map((o) => `<option value="${o.id}" ${rec.outletId === o.id ? 'selected' : ''}>${escapeHtml(o.name)}</option>`).join('');
+  const v = rec;
 
   openModal(`
-    <h2>${isEdit ? 'Modifier l’abonnement' : 'Nouvel abonnement 4G Home'}</h2>
+    <h2>Modifier l'abonnement</h2>
     <form id="subForm">
       <div class="form-grid">
         <label class="field">Date de création
@@ -266,30 +331,24 @@ function openForm(state, actions, rec) {
         </label>
       </div>
       <div class="modal-actions">
-        ${isEdit ? '<button type="button" class="btn btn-danger" id="btnDelete">Supprimer</button>' : ''}
+        <button type="button" class="btn btn-danger" id="btnDelete">Supprimer</button>
         <button type="button" class="btn" id="btnCancel">Annuler</button>
-        <button type="submit" class="btn btn-primary">${isEdit ? 'Enregistrer' : 'Ajouter'}</button>
+        <button type="submit" class="btn btn-primary">Enregistrer</button>
       </div>
     </form>
   `, (modalEl) => {
     modalEl.querySelector('#btnCancel').addEventListener('click', closeModal);
-    if (isEdit) {
-      modalEl.querySelector('#btnDelete').addEventListener('click', () => {
-        if (confirm('Supprimer cet abonnement ?')) {
-          actions.commit((s) => removeSubscription(s, rec.id));
-          closeModal();
-        }
-      });
-    }
+    modalEl.querySelector('#btnDelete').addEventListener('click', () => {
+      if (confirm('Supprimer cet abonnement ?')) {
+        actions.commit((s) => removeSubscription(s, rec.id));
+        closeModal();
+      }
+    });
     modalEl.querySelector('#subForm').addEventListener('submit', (e) => {
       e.preventDefault();
       const fd = new FormData(e.target);
       const data = Object.fromEntries(fd.entries());
-      if (isEdit) {
-        actions.commit((s) => updateSubscription(s, rec.id, data));
-      } else {
-        actions.commit((s) => addSubscription(s, data));
-      }
+      actions.commit((s) => updateSubscription(s, rec.id, data));
       closeModal();
     });
   });

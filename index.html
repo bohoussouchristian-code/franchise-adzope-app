@@ -54,10 +54,23 @@
         </div>
       </div>
 
-      <button class="tab side-link" data-tab="abonnements">
-        <svg viewBox="0 0 24 24" class="side-icon"><path d="M4 8a8 8 0 0 1 16 0h-2a6 6 0 0 0-12 0Zm3 0a5 5 0 0 1 10 0h-2a3 3 0 0 0-6 0Zm2 0a3 3 0 0 1 6 0h-2a1 1 0 0 0-2 0Z"/><circle cx="12" cy="17" r="2"/></svg>
-        Abonnements 4G Home
-      </button>
+      <div class="side-group" data-group="abonnements">
+        <button class="side-group-toggle">
+          <svg viewBox="0 0 24 24" class="side-icon"><path d="M4 8a8 8 0 0 1 16 0h-2a6 6 0 0 0-12 0Zm3 0a5 5 0 0 1 10 0h-2a3 3 0 0 0-6 0Zm2 0a3 3 0 0 1 6 0h-2a1 1 0 0 0-2 0Z"/><circle cx="12" cy="17" r="2"/></svg>
+          <span>Abonnements 4G Home</span>
+          <svg viewBox="0 0 24 24" class="side-chevron"><path d="M7 10l5 5 5-5z"/></svg>
+        </button>
+        <div class="side-group-items">
+          <button class="tab side-link side-sublink" data-tab="abonnements-nouveau">
+            <svg viewBox="0 0 24 24" class="side-icon"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6Z"/></svg>
+            Nouvel abonnement
+          </button>
+          <button class="tab side-link side-sublink" data-tab="abonnements-historique">
+            <svg viewBox="0 0 24 24" class="side-icon"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Zm1 10.6 4.2 2.5-.8 1.3-5-3V6h1.6Z"/></svg>
+            Historique des abonnements
+          </button>
+        </div>
+      </div>
 
       <div class="side-group" data-group="equipe">
         <button class="side-group-toggle">

@@ -27,9 +27,10 @@ const MODULES = [
     ],
   },
   {
-    code: 'ABO', title: 'Abonnements 4G Home', icon: 'wifi', tab: 'abonnements',
+    code: 'ABO', title: 'Abonnements 4G Home', icon: 'wifi', tab: 'abonnements-nouveau',
     links: [
-      { label: 'Registre complet', tab: 'abonnements' },
+      { label: 'Nouvel abonnement', tab: 'abonnements-nouveau' },
+      { label: 'Historique des abonnements', tab: 'abonnements-historique' },
     ],
   },
   {
