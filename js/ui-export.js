@@ -1,5 +1,5 @@
 import { MONTH_NAMES_FR, monthKey, fmtNum, escapeHtml } from './utils.js';
-import { computeProductMonth, computeProductPeriod, addSubscription, resetState } from './store.js';
+import { computeProductMonth, computeProductPeriod, getObjectiveEntry, addSubscription, resetState } from './store.js';
 import { findHeaderRow, buildColumnMap, parseSubscriptionRows } from './import-parser.js';
 import { verifyPassword, changePassword, getIdentifier } from './auth.js';
 
@@ -120,7 +120,8 @@ function exportXlsx(state) {
       for (let mi = 0; mi < 12; mi++) {
         const mKey = monthKey(state.meta.year, mi);
         const r = computeProductMonth(state, agent.id, product.id, mKey);
-        if (r.objective === 0 && r.realized === 0) continue;
+        const entry = getObjectiveEntry(state, agent.id, product.id, mKey, false);
+        if (r.objective === 0 && r.realized === 0 && !(entry && entry.comment)) continue;
         objRows.push({
           Vendeur: agent.name,
           Produit: product.name,
@@ -133,6 +134,7 @@ function exportXlsx(state) {
           'Total réalisé': r.realized,
           GAP: r.gap,
           '%': r.pct === null ? '' : Math.round(r.pct * 100) + '%',
+          Commentaire: entry ? (entry.comment || '') : '',
         });
       }
     });

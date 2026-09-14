@@ -1,5 +1,5 @@
-import { MONTH_NAMES_FR, monthKey, fmtNum, fmtPct, pctClass } from './utils.js';
-import { computeProductMonth, setObjective, setWeekActual } from './store.js';
+import { MONTH_NAMES_FR, monthKey, fmtNum, fmtPct, pctClass, escapeHtml } from './utils.js';
+import { computeProductMonth, getObjectiveEntry, setObjective, setWeekActual, setComment } from './store.js';
 
 let ui = { year: null, month: new Date().getMonth(), agentId: null };
 
@@ -10,7 +10,7 @@ export function renderObjectifs(root, state, actions) {
   const wrap = document.createElement('div');
   wrap.innerHTML = `
     <h1 class="page-title">Fiche d'objectifs mensuels</h1>
-    <p class="page-sub">Un formulaire par produit : indiquez l'objectif du mois, puis les ventes réalisées chaque semaine.</p>
+    <p class="page-sub">Un formulaire complet par produit : objectif du mois, ventes de chaque semaine et commentaire — pour fixer et suivre l'objectif d'un vendeur.</p>
 
     <div class="toolbar">
       <label class="field">Année
@@ -25,6 +25,7 @@ export function renderObjectifs(root, state, actions) {
     </div>
 
     ${state.agents.length === 0 ? `<div class="empty-state">Ajoutez d'abord un vendeur dans l'onglet « Équipe &amp; Points de vente ».</div>` : ''}
+    <div id="formBanner"></div>
     <div id="formHost" class="obj-form-grid"></div>
   `;
   root.appendChild(wrap);
@@ -63,6 +64,15 @@ export function renderObjectifs(root, state, actions) {
   agentSel.addEventListener('change', (e) => { ui.agentId = e.target.value; actions.rerender(); });
 
   const mKey = monthKey(ui.year, ui.month);
+  const currentAgent = state.agents.find((a) => a.id === ui.agentId);
+
+  wrap.querySelector('#formBanner').innerHTML = `
+    <div class="obj-banner">
+      Fiche d'objectifs de <b>${escapeHtml(currentAgent ? currentAgent.name : '')}</b>
+      pour <b>${MONTH_NAMES_FR[ui.month]} ${ui.year}</b>
+    </div>
+  `;
+
   const host = wrap.querySelector('#formHost');
 
   state.products.forEach((p) => {
@@ -77,12 +87,16 @@ export function renderObjectifs(root, state, actions) {
     } else if (e.target.classList.contains('week-input')) {
       const w = Number(e.target.dataset.week);
       actions.commit((s) => setWeekActual(s, ui.agentId, productId, mKey, w, e.target.value));
+    } else if (e.target.classList.contains('comment-input')) {
+      actions.commit((s) => setComment(s, ui.agentId, productId, mKey, e.target.value));
     }
   });
 }
 
 function buildProductForm(state, actions, product, mKey) {
   const r = computeProductMonth(state, ui.agentId, product.id, mKey);
+  const entry = getObjectiveEntry(state, ui.agentId, product.id, mKey, false);
+  const comment = entry ? (entry.comment || '') : '';
   const cls = pctClass(r.pct);
   const width = r.pct === null ? 0 : Math.min(100, Math.round(r.pct * 100));
 
@@ -125,6 +139,11 @@ function buildProductForm(state, actions, product, mKey) {
       <span>Réalisé <b>${fmtNum(r.realized)}</b></span>
       <span>GAP <b>${r.gap >= 0 ? '+' : ''}${fmtNum(r.gap)}</b></span>
     </div>
+
+    <label class="obj-comment-field">
+      Commentaire
+      <textarea class="comment-input" rows="2" placeholder="Observation, justification d'écart..." data-product="${product.id}">${escapeHtml(comment)}</textarea>
+    </label>
   `;
   return card;
 }

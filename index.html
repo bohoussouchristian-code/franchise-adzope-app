@@ -9,31 +9,63 @@
 <body>
 <div id="loginRoot"></div>
 
-<div id="appRoot" hidden>
-  <header class="topbar">
-    <div class="brand">
-      <img src="assets/logo.jpg" alt="OmnySyncBase" class="brand-badge">
+<div id="appRoot" class="app-shell" hidden>
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <img src="assets/logo.jpg" alt="OmnySyncBase" class="sidebar-logo">
       <div>
-        <div class="brand-title" id="brandTitle">TEAM FRANCHISE ADZOPÉ</div>
-        <div class="brand-sub">OmnySyncBase · Suivi objectifs &amp; abonnements 4G Home</div>
+        <div class="sidebar-title" id="brandTitle">TEAM FRANCHISE ADZOPÉ</div>
+        <div class="sidebar-sub">OmnySyncBase</div>
       </div>
     </div>
-    <nav class="tabs" id="tabs">
-      <button class="tab active" data-tab="dashboard">Tableau de bord</button>
-      <button class="tab" data-tab="objectifs">Objectifs</button>
-      <button class="tab" data-tab="abonnements">Abonnements 4G Home</button>
-      <button class="tab" data-tab="equipe">Équipe &amp; Points de vente</button>
-      <button class="tab" data-tab="export">Export / Sauvegarde</button>
+    <nav class="sidenav" id="tabs">
+      <button class="tab side-link active" data-tab="dashboard">
+        <svg viewBox="0 0 24 24" class="side-icon"><path d="M12 3 2 11h3v9h6v-6h2v6h6v-9h3Z"/></svg>
+        Tableau de bord
+      </button>
+      <button class="tab side-link" data-tab="bilan">
+        <svg viewBox="0 0 24 24" class="side-icon"><path d="M3 13h8V3H3v10Zm0 8h8v-6H3v6Zm10 0h8V11h-8v10Zm0-18v6h8V3h-8Z"/></svg>
+        Bilan des activités
+      </button>
+      <button class="tab side-link" data-tab="objectifs">
+        <svg viewBox="0 0 24 24" class="side-icon"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Zm0 16a6 6 0 1 1 6-6 6 6 0 0 1-6 6Zm0-9a3 3 0 1 0 3 3 3 3 0 0 0-3-3Z"/></svg>
+        Objectifs
+      </button>
+      <button class="tab side-link" data-tab="abonnements">
+        <svg viewBox="0 0 24 24" class="side-icon"><path d="M4 8a8 8 0 0 1 16 0h-2a6 6 0 0 0-12 0Zm3 0a5 5 0 0 1 10 0h-2a3 3 0 0 0-6 0Zm2 0a3 3 0 0 1 6 0h-2a1 1 0 0 0-2 0Z"/><circle cx="12" cy="17" r="2"/></svg>
+        Abonnements 4G Home
+      </button>
+      <button class="tab side-link" data-tab="equipe">
+        <svg viewBox="0 0 24 24" class="side-icon"><path d="M16 11a4 4 0 1 0-4-4 4 4 0 0 0 4 4Zm-8 0a4 4 0 1 0-4-4 4 4 0 0 0 4 4Zm0 2c-2.7 0-8 1.3-8 4v3h10v-3c0-1.2.5-2.2 1.3-3.1A13.4 13.4 0 0 0 8 13Zm8 0c-.6 0-1.3 0-2 .1.9.9 1.5 2 1.5 3.4v3.5h8.5v-3c0-2.7-5.3-4-8-4Z"/></svg>
+        Équipe &amp; Points de vente
+      </button>
+      <button class="tab side-link" data-tab="export">
+        <svg viewBox="0 0 24 24" class="side-icon"><path d="M5 20h14v-2H5Zm7-16-5.5 5.5 1.4 1.4L11 8.8V17h2V8.8l3.1 3.1 1.4-1.4Z"/></svg>
+        Export / Sauvegarde
+      </button>
     </nav>
-    <button class="btn btn-sm logout-btn" id="btnLogout">Se déconnecter</button>
-  </header>
+  </aside>
 
-  <main id="view"></main>
+  <div class="main-col">
+    <header class="topheader">
+      <div></div>
+      <div class="user-chip" id="userChip">
+        <span class="user-avatar" id="userAvatar">A</span>
+        <div>
+          <div class="user-name" id="userName">Administrateur</div>
+          <div class="user-role">Compte principal</div>
+        </div>
+        <button class="btn btn-sm" id="btnLogout">Se déconnecter</button>
+      </div>
+    </header>
 
-  <footer class="footer">
-    Données enregistrées localement dans ce navigateur — pensez à exporter une sauvegarde régulièrement (onglet Export / Sauvegarde).
-    <br>OmnySyncBase — Le tout-en-un pour gérer votre entreprise
-  </footer>
+    <main id="view"></main>
+
+    <footer class="footer">
+      Données enregistrées localement dans ce navigateur — pensez à exporter une sauvegarde régulièrement (onglet Export / Sauvegarde).
+      <br>OmnySyncBase — Le tout-en-un pour gérer votre entreprise
+    </footer>
+  </div>
 </div>
 
 <div id="modalRoot"></div>

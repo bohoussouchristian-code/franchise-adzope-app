@@ -91,9 +91,11 @@ export function getObjectiveEntry(s, agentId, productId, mKey, createIfMissing =
   }
   if (!s.objectives[agentId][productId][mKey]) {
     if (!createIfMissing) return null;
-    s.objectives[agentId][productId][mKey] = { objective: 0, weeks: [0, 0, 0, 0] };
+    s.objectives[agentId][productId][mKey] = { objective: 0, weeks: [0, 0, 0, 0], comment: '' };
   }
-  return s.objectives[agentId][productId][mKey];
+  const entry = s.objectives[agentId][productId][mKey];
+  if (entry.comment === undefined) entry.comment = '';
+  return entry;
 }
 
 export function setObjective(s, agentId, productId, mKey, objective) {
@@ -104,6 +106,11 @@ export function setObjective(s, agentId, productId, mKey, objective) {
 export function setWeekActual(s, agentId, productId, mKey, weekIndex0, value) {
   const e = getObjectiveEntry(s, agentId, productId, mKey, true);
   e.weeks[weekIndex0] = Number(value) || 0;
+}
+
+export function setComment(s, agentId, productId, mKey, comment) {
+  const e = getObjectiveEntry(s, agentId, productId, mKey, true);
+  e.comment = comment;
 }
 
 // Réalisé hebdo pour un produit "auto" (4G Home) à partir du registre d'abonnements.
