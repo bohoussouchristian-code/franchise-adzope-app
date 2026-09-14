@@ -1,4 +1,4 @@
-import { uid, monthKey, weekOfMonth, monthsInQuarter } from './utils.js';
+import { uid, monthKey, parseMonthKey, weekOfMonth, monthsInQuarter } from './utils.js';
 
 const STORAGE_KEY = 'fa2026_state_v1';
 
@@ -111,6 +111,63 @@ export function setWeekActual(s, agentId, productId, mKey, weekIndex0, value) {
 export function setComment(s, agentId, productId, mKey, comment) {
   const e = getObjectiveEntry(s, agentId, productId, mKey, true);
   e.comment = comment;
+}
+
+// Crée ou met à jour en une fois un objectif complet (utilisé par le
+// formulaire modal "+ Nouvel objectif").
+export function upsertObjective(s, agentId, productId, mKey, { objective, weeks, comment }) {
+  const e = getObjectiveEntry(s, agentId, productId, mKey, true);
+  e.objective = Number(objective) || 0;
+  e.weeks = Array.from({ length: 4 }, (_, i) => Number(weeks[i]) || 0);
+  e.comment = comment || '';
+}
+
+export function removeObjectiveEntry(s, agentId, productId, mKey) {
+  if (s.objectives[agentId] && s.objectives[agentId][productId]) {
+    delete s.objectives[agentId][productId][mKey];
+  }
+}
+
+// Aplati le registre des objectifs en lignes prêtes à afficher (tableau de
+// suivi et historique), en recalculant objectif/réalisé/GAP/% via
+// computeProductMonth pour rester cohérent avec le reste de l'application.
+export function listObjectiveRows(s, filters = {}) {
+  const { agentId = 'ALL', year = 'ALL', productId = 'ALL' } = filters;
+  const rows = [];
+  for (const aId of Object.keys(s.objectives)) {
+    if (agentId !== 'ALL' && aId !== agentId) continue;
+    const agent = s.agents.find((a) => a.id === aId);
+    for (const pId of Object.keys(s.objectives[aId])) {
+      if (productId !== 'ALL' && pId !== productId) continue;
+      const product = s.products.find((p) => p.id === pId);
+      for (const mKey of Object.keys(s.objectives[aId][pId])) {
+        const { year: y, monthIndex0 } = parseMonthKey(mKey);
+        if (year !== 'ALL' && y !== Number(year)) continue;
+        const entry = s.objectives[aId][pId][mKey];
+        const hasData = entry.objective || entry.weeks.some((w) => w) || entry.comment;
+        if (!hasData) continue;
+        const r = computeProductMonth(s, aId, pId, mKey);
+        rows.push({
+          agentId: aId,
+          agentName: agent ? agent.name : '(vendeur supprimé)',
+          productId: pId,
+          productName: product ? product.name : pId,
+          autoFromRegistry: !!(product && product.autoFromRegistry),
+          mKey,
+          year: y,
+          monthIndex0,
+          objective: r.objective,
+          weeks: r.weeks,
+          realized: r.realized,
+          gap: r.gap,
+          pct: r.pct,
+          comment: entry.comment || '',
+        });
+      }
+    }
+  }
+  rows.sort((a, b) => b.mKey.localeCompare(a.mKey) || a.agentName.localeCompare(b.agentName));
+  return rows;
 }
 
 // Réalisé hebdo pour un produit "auto" (4G Home) à partir du registre d'abonnements.
