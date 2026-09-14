@@ -1,6 +1,7 @@
 import { MONTH_NAMES_FR, monthKey, fmtNum, escapeHtml } from './utils.js';
 import { computeProductMonth, computeProductPeriod, addSubscription, resetState } from './store.js';
 import { findHeaderRow, buildColumnMap, parseSubscriptionRows } from './import-parser.js';
+import { verifyPassword, setPassword } from './auth.js';
 
 let pendingImport = null;
 
@@ -39,6 +40,28 @@ export function renderExport(root, state, actions) {
     </div>
 
     <div class="section">
+      <h3 class="section-title">Sécurité</h3>
+      <div class="card">
+        <form id="pwForm" class="form-grid" style="max-width:420px">
+          <label class="field">Mot de passe actuel
+            <input type="password" id="pwCurrent" autocomplete="current-password" required>
+          </label>
+          <div></div>
+          <label class="field">Nouveau mot de passe
+            <input type="password" id="pwNew" autocomplete="new-password" required minlength="4">
+          </label>
+          <label class="field">Confirmer
+            <input type="password" id="pwNew2" autocomplete="new-password" required minlength="4">
+          </label>
+          <div id="pwMsg" class="full small" hidden></div>
+          <div class="full">
+            <button type="submit" class="btn btn-primary btn-sm">Changer le mot de passe</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="section">
       <h3 class="section-title">Zone sensible</h3>
       <div class="card">
         <button class="btn btn-danger" id="btnReset">Réinitialiser toutes les données</button>
@@ -57,6 +80,31 @@ export function renderExport(root, state, actions) {
       actions.rerender();
     }
   });
+  wrap.querySelector('#pwForm').addEventListener('submit', handlePasswordChange(wrap));
+}
+
+function handlePasswordChange(wrap) {
+  return async (e) => {
+    e.preventDefault();
+    const msg = wrap.querySelector('#pwMsg');
+    const show = (text, isError) => {
+      msg.textContent = text;
+      msg.hidden = false;
+      msg.style.color = isError ? 'var(--bad)' : 'var(--good)';
+    };
+    const current = wrap.querySelector('#pwCurrent').value;
+    const next = wrap.querySelector('#pwNew').value;
+    const next2 = wrap.querySelector('#pwNew2').value;
+
+    const ok = await verifyPassword(current);
+    if (!ok) { show('Mot de passe actuel incorrect.', true); return; }
+    if (next !== next2) { show('Les deux nouveaux mots de passe ne correspondent pas.', true); return; }
+    if (next.length < 4) { show('Le nouveau mot de passe doit contenir au moins 4 caractères.', true); return; }
+
+    await setPassword(next);
+    wrap.querySelector('#pwForm').reset();
+    show('Mot de passe modifié avec succès.', false);
+  };
 }
 
 // ---------- Export Excel ----------
