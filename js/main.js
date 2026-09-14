@@ -4,6 +4,8 @@ import { renderBilan } from './ui-bilan.js';
 import { renderObjectifsSuivi, renderObjectifsHistorique } from './ui-objectifs.js';
 import { renderEvaluations, renderOutlets } from './ui-notation.js';
 import { renderNouvelAbonnement, renderHistoriqueAbonnements } from './ui-abonnements.js';
+import { renderNouvelleFibre, renderHistoriqueFibre } from './ui-fibre.js';
+import { renderNouvelleVenteSmartphone, renderHistoriqueVentesSmartphones } from './ui-smartphones.js';
 import { renderEquipeVendeurs, renderEquipePointsDeVente } from './ui-equipe.js';
 import { renderExport } from './ui-export.js';
 import { renderParametres } from './ui-parametres.js';
@@ -32,6 +34,10 @@ const pages = {
   'objectifs-outlets': renderOutlets,
   'abonnements-nouveau': renderNouvelAbonnement,
   'abonnements-historique': renderHistoriqueAbonnements,
+  'fibre-nouveau': renderNouvelleFibre,
+  'fibre-historique': renderHistoriqueFibre,
+  'smartphones-nouveau': renderNouvelleVenteSmartphone,
+  'smartphones-historique': renderHistoriqueVentesSmartphones,
   'equipe-vendeurs': renderEquipeVendeurs,
   'equipe-points': renderEquipePointsDeVente,
   export: renderExport,

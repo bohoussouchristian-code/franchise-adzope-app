@@ -9,7 +9,8 @@ const DEFAULT_PRODUCTS = [
   { id: 'packs', name: 'Packs', unit: 'pack', annual: 240, autoFromRegistry: false },
   { id: 'cofina', name: 'Cofina', unit: 'dossier', annual: 132, autoFromRegistry: false },
   { id: 'ghome4', name: '4G Home', unit: 'abonnement', annual: 60, autoFromRegistry: true },
-  { id: 'fibreup', name: 'Fibre Up', unit: 'abonnement', annual: 60, autoFromRegistry: false },
+  { id: 'fibreup', name: 'Fibre Up', unit: 'abonnement', annual: 60, autoFromRegistry: true },
+  { id: 'smartphone', name: 'Smartphones', unit: 'vente', annual: 0, autoFromRegistry: true },
   { id: 'qrcode', name: 'QR Code', unit: 'vente', annual: 192, autoFromRegistry: false },
   { id: 'maxit', name: 'Max-it', unit: 'vente', annual: 204, autoFromRegistry: false },
   { id: 'carteoba', name: 'Carte Oba', unit: 'carte', annual: 24, autoFromRegistry: false },
@@ -44,6 +45,8 @@ function defaultState() {
     products,
     objectives: {}, // [agentId][productId][monthKey] = { objective, weeks: [w1,w2,w3,w4] }
     subscriptions4gHome: [], // registre détaillé 4G Home
+    subscriptionsFibre: [], // registre détaillé Fibre
+    salesSmartphones: [], // registre détaillé ventes Smartphones (cash / crédit)
     ratings: { evaluations: {}, frequentation: {}, clientMystere: {} },
   };
 }
@@ -76,6 +79,8 @@ function migrateState(s) {
   if (!s.products) s.products = DEFAULT_PRODUCTS.map((p) => ({ ...p }));
   if (!s.objectives) s.objectives = {};
   if (!s.subscriptions4gHome) s.subscriptions4gHome = [];
+  if (!s.subscriptionsFibre) s.subscriptionsFibre = [];
+  if (!s.salesSmartphones) s.salesSmartphones = [];
   if (!s.ratings) s.ratings = {};
   if (!s.ratings.evaluations) s.ratings.evaluations = {};
   if (!s.ratings.frequentation) s.ratings.frequentation = {};
@@ -87,6 +92,15 @@ function migrateState(s) {
   Object.values(s.objectives).forEach((byProduct) => {
     RETIRED_PRODUCT_IDS.forEach((pid) => delete byProduct[pid]);
   });
+
+  // Ajoute les nouveaux produits par défaut (Smartphones...) aux états existants
+  // et bascule Fibre Up en produit automatique (alimenté par son propre registre).
+  const existingProductIds = new Set(s.products.map((p) => p.id));
+  DEFAULT_PRODUCTS.forEach((dp) => {
+    if (!existingProductIds.has(dp.id)) s.products.push({ ...dp });
+  });
+  const fibreProduct = s.products.find((p) => p.id === 'fibreup');
+  if (fibreProduct) fibreProduct.autoFromRegistry = true;
 }
 
 export function saveState(s) {
@@ -192,15 +206,23 @@ export function listObjectiveRows(s, filters = {}) {
   return rows;
 }
 
-// Réalisé hebdo pour un produit "auto" (4G Home) à partir du registre d'abonnements.
+// Associe chaque produit "auto" à son registre détaillé dans l'état.
+const AUTO_PRODUCT_REGISTRY = {
+  ghome4: 'subscriptions4gHome',
+  fibreup: 'subscriptionsFibre',
+  smartphone: 'salesSmartphones',
+};
+
+// Réalisé hebdo pour un produit "auto" (4G Home, Fibre, Smartphones) à partir de son registre détaillé.
 function realizedWeeksFromRegistry(s, agentId, productId, mKey) {
   const weeks = [0, 0, 0, 0];
-  if (productId !== 'ghome4') return weeks;
-  for (const sub of s.subscriptions4gHome) {
-    if (!sub.dateCreation) continue;
-    if (!sub.dateCreation.startsWith(mKey)) continue;
-    if (agentId !== 'ALL' && sub.agentId !== agentId) continue;
-    const w = weekOfMonth(sub.dateCreation);
+  const registryKey = AUTO_PRODUCT_REGISTRY[productId];
+  if (!registryKey) return weeks;
+  for (const rec of s[registryKey] || []) {
+    if (!rec.dateCreation) continue;
+    if (!rec.dateCreation.startsWith(mKey)) continue;
+    if (agentId !== 'ALL' && rec.agentId !== agentId) continue;
+    const w = weekOfMonth(rec.dateCreation);
     weeks[w - 1] += 1;
   }
   return weeks;
@@ -268,6 +290,8 @@ export function removeAgent(s, id) {
   s.agents = s.agents.filter((a) => a.id !== id);
   delete s.objectives[id];
   s.subscriptions4gHome.forEach((sub) => { if (sub.agentId === id) sub.agentId = null; });
+  s.subscriptionsFibre.forEach((sub) => { if (sub.agentId === id) sub.agentId = null; });
+  s.salesSmartphones.forEach((sale) => { if (sale.agentId === id) sale.agentId = null; });
 }
 
 export function addOutlet(s, name) {
@@ -284,6 +308,8 @@ export function renameOutlet(s, id, name) {
 export function removeOutlet(s, id) {
   s.outlets = s.outlets.filter((o) => o.id !== id);
   s.subscriptions4gHome.forEach((sub) => { if (sub.outletId === id) sub.outletId = null; });
+  s.subscriptionsFibre.forEach((sub) => { if (sub.outletId === id) sub.outletId = null; });
+  s.salesSmartphones.forEach((sale) => { if (sale.outletId === id) sale.outletId = null; });
 }
 
 // ---------- Abonnements 4G Home ----------
@@ -321,6 +347,85 @@ export function updateSubscription(s, id, data) {
 
 export function removeSubscription(s, id) {
   s.subscriptions4gHome = s.subscriptions4gHome.filter((r) => r.id !== id);
+}
+
+// ---------- Fibre ----------
+
+export function addFibreSubscription(s, data) {
+  const rec = {
+    id: uid('fib'),
+    dateCreation: data.dateCreation || null,
+    agentId: data.agentId || null,
+    outletId: data.outletId || null,
+    loginSaisie: data.loginSaisie || '',
+    loginPaiement: data.loginPaiement || '',
+    dateDepotAvantages: data.dateDepotAvantages || null,
+    numeroClient: data.numeroClient || '',
+    numeroFixe: data.numeroFixe || '',
+    infoClient: data.infoClient || '',
+    referenceFacture: data.referenceFacture || '',
+    coutFactureInitiale: Number(data.coutFactureInitiale) || 0,
+    modePaiement: data.modePaiement || '',
+  };
+  s.subscriptionsFibre.unshift(rec);
+  return rec;
+}
+
+export function updateFibreSubscription(s, id, data) {
+  const rec = s.subscriptionsFibre.find((r) => r.id === id);
+  if (!rec) return;
+  Object.assign(rec, data, {
+    coutFactureInitiale: data.coutFactureInitiale !== undefined
+      ? Number(data.coutFactureInitiale) || 0
+      : rec.coutFactureInitiale,
+  });
+}
+
+export function removeFibreSubscription(s, id) {
+  s.subscriptionsFibre = s.subscriptionsFibre.filter((r) => r.id !== id);
+}
+
+// ---------- Smartphones (vente cash / crédit) ----------
+
+export function smartphoneReste(rec) {
+  return Math.max(0, (rec.prixTotal || 0) - (rec.avanceVersee || 0));
+}
+
+export function addSmartphoneSale(s, data) {
+  const prixTotal = Number(data.prixTotal) || 0;
+  const modeVente = data.modeVente === 'CREDIT' ? 'CREDIT' : 'CASH';
+  const avanceVersee = modeVente === 'CASH' ? prixTotal : Math.min(Number(data.avanceVersee) || 0, prixTotal);
+  const rec = {
+    id: uid('smp'),
+    dateCreation: data.dateCreation || null,
+    agentId: data.agentId || null,
+    outletId: data.outletId || null,
+    infoClient: data.infoClient || '',
+    numeroClient: data.numeroClient || '',
+    modele: data.modele || '',
+    modeVente,
+    prixTotal,
+    avanceVersee,
+    referenceFacture: data.referenceFacture || '',
+    modePaiement: data.modePaiement || '',
+  };
+  s.salesSmartphones.unshift(rec);
+  return rec;
+}
+
+export function updateSmartphoneSale(s, id, data) {
+  const rec = s.salesSmartphones.find((r) => r.id === id);
+  if (!rec) return;
+  const prixTotal = data.prixTotal !== undefined ? Number(data.prixTotal) || 0 : rec.prixTotal;
+  const modeVente = data.modeVente !== undefined ? (data.modeVente === 'CREDIT' ? 'CREDIT' : 'CASH') : rec.modeVente;
+  const avanceVersee = modeVente === 'CASH'
+    ? prixTotal
+    : Math.min(data.avanceVersee !== undefined ? Number(data.avanceVersee) || 0 : rec.avanceVersee, prixTotal);
+  Object.assign(rec, data, { prixTotal, modeVente, avanceVersee });
+}
+
+export function removeSmartphoneSale(s, id) {
+  s.salesSmartphones = s.salesSmartphones.filter((r) => r.id !== id);
 }
 
 // ---------- Notation : évaluation des vendeurs ----------

@@ -1,5 +1,5 @@
 import { MONTH_NAMES_FR, monthKey, fmtNum, escapeHtml } from './utils.js';
-import { computeProductMonth, computeProductPeriod, getObjectiveEntry, addSubscription, resetState, listEvaluationRows, listOutletMetricRows, EVAL_CRITERIA } from './store.js';
+import { computeProductMonth, computeProductPeriod, getObjectiveEntry, addSubscription, resetState, listEvaluationRows, listOutletMetricRows, EVAL_CRITERIA, smartphoneReste } from './store.js';
 import { findHeaderRow, buildColumnMap, parseSubscriptionRows } from './import-parser.js';
 
 let pendingImport = null;
@@ -150,6 +150,46 @@ function exportXlsx(state) {
     }));
   const wsSubs = XLSX.utils.json_to_sheet(subRows);
   XLSX.utils.book_append_sheet(wb, wsSubs, 'Abonnements 4G Home');
+
+  // Feuille Abonnements Fibre
+  const fibreRows = state.subscriptionsFibre
+    .slice()
+    .sort((a, b) => (a.dateCreation || '').localeCompare(b.dateCreation || ''))
+    .map((s) => ({
+      'Date de création': s.dateCreation || '',
+      'Nom client': s.infoClient,
+      'N° client': s.numeroClient,
+      'Numéro fixe': s.numeroFixe,
+      'Référence facture': s.referenceFacture,
+      'Coût facture initiale': s.coutFactureInitiale,
+      'Vendeur': s.agentId ? (agentById[s.agentId] || '') : '',
+      'Point de vente': s.outletId ? (outletById[s.outletId] || '') : '',
+      'Login saisie': s.loginSaisie,
+      'Login paiement': s.loginPaiement,
+      'Date dépôt avantages': s.dateDepotAvantages || '',
+      'Mode paiement': s.modePaiement,
+    }));
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(fibreRows), 'Abonnements Fibre');
+
+  // Feuille Ventes Smartphones
+  const smpRows = state.salesSmartphones
+    .slice()
+    .sort((a, b) => (a.dateCreation || '').localeCompare(b.dateCreation || ''))
+    .map((s) => ({
+      'Date de vente': s.dateCreation || '',
+      'Nom client': s.infoClient,
+      'N° client': s.numeroClient,
+      'Modèle': s.modele,
+      'Mode de vente': s.modeVente === 'CASH' ? 'Cash' : 'Crédit',
+      'Prix total': s.prixTotal,
+      'Avance versée': s.avanceVersee,
+      'Reste à payer': smartphoneReste(s),
+      'Vendeur': s.agentId ? (agentById[s.agentId] || '') : '',
+      'Point de vente': s.outletId ? (outletById[s.outletId] || '') : '',
+      'Référence facture': s.referenceFacture,
+      'Mode paiement': s.modePaiement,
+    }));
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(smpRows), 'Ventes Smartphones');
 
   // Feuille Évaluations (Notation, par vendeur)
   const evalRows = listEvaluationRows(state, { year: state.meta.year }).map((r) => {
