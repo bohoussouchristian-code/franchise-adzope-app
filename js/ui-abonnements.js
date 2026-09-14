@@ -162,11 +162,6 @@ function filteredSubs(state) {
 function renderSubsTable(host, subs, state, actions, { emptyText }) {
   host.innerHTML = '';
 
-  if (!subs.length) {
-    host.innerHTML = `<div class="empty-state">${emptyText}</div>`;
-    return;
-  }
-
   const box = document.createElement('div');
   box.className = 'table-wrap';
   const table = document.createElement('table');
@@ -189,6 +184,15 @@ function renderSubsTable(host, subs, state, actions, { emptyText }) {
     <tbody></tbody>
   `;
   const tbody = table.querySelector('tbody');
+
+  if (!subs.length) {
+    const colCount = table.querySelectorAll('thead th').length;
+    tbody.innerHTML = `<tr class="table-empty-row"><td colspan="${colCount}">${emptyText}</td></tr>`;
+    box.appendChild(table);
+    host.appendChild(box);
+    return;
+  }
+
   const agentById = Object.fromEntries(state.agents.map((a) => [a.id, a.name]));
   const outletById = Object.fromEntries(state.outlets.map((o) => [o.id, o.name]));
 

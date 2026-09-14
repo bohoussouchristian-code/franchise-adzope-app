@@ -62,10 +62,6 @@ export function renderEvaluations(host, state, actions) {
 }
 
 function renderEvalTable(host, rows, state, actions) {
-  if (!rows.length) {
-    host.innerHTML = `<div class="empty-state">Aucune évaluation pour ce mois. Cliquez sur « + Nouvelle évaluation » pour en créer une.</div>`;
-    return;
-  }
   const box = document.createElement('div');
   box.className = 'table-wrap';
   const table = document.createElement('table');
@@ -84,6 +80,16 @@ function renderEvalTable(host, rows, state, actions) {
     <tbody></tbody>
   `;
   const tbody = table.querySelector('tbody');
+
+  if (!rows.length) {
+    const colCount = table.querySelectorAll('thead th').length;
+    tbody.innerHTML = `<tr class="table-empty-row"><td colspan="${colCount}">Aucune évaluation pour ce mois. Cliquez sur « + Nouvelle évaluation » pour en créer une.</td></tr>`;
+    box.appendChild(table);
+    host.innerHTML = '';
+    host.appendChild(box);
+    return;
+  }
+
   rows.forEach((r) => {
     const cls = pctClass(r.pct);
     const tr = document.createElement('tr');
@@ -260,10 +266,6 @@ function mergeOutletRows(state, freqRows, cmRows, mKey) {
 }
 
 function renderOutletTable(host, rows, state, actions) {
-  if (!rows.length) {
-    host.innerHTML = `<div class="empty-state">Aucune saisie pour ce mois. Cliquez sur « + Nouvelle saisie » pour en créer une.</div>`;
-    return;
-  }
   const box = document.createElement('div');
   box.className = 'table-wrap';
   const table = document.createElement('table');
@@ -283,6 +285,16 @@ function renderOutletTable(host, rows, state, actions) {
     <tbody></tbody>
   `;
   const tbody = table.querySelector('tbody');
+
+  if (!rows.length) {
+    const colCount = table.querySelectorAll('thead th').length;
+    tbody.innerHTML = `<tr class="table-empty-row"><td colspan="${colCount}">Aucune saisie pour ce mois. Cliquez sur « + Nouvelle saisie » pour en créer une.</td></tr>`;
+    box.appendChild(table);
+    host.innerHTML = '';
+    host.appendChild(box);
+    return;
+  }
+
   rows.forEach((r) => {
     const f = r.freq || { objective: 0, realized: 0, pct: null };
     const c = r.cm || { objective: 0, realized: 0, pct: null };

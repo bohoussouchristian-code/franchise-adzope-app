@@ -96,11 +96,6 @@ export function renderObjectifsHistorique(root, state, actions) {
 // ---------- Tableau partagé ----------
 
 function renderTable(host, rows, state, actions, { showActions, showPeriod, emptyText }) {
-  if (!rows.length) {
-    host.innerHTML = `<div class="empty-state">${emptyText}</div>`;
-    return;
-  }
-
   const box = document.createElement('div');
   box.className = 'table-wrap';
   const table = document.createElement('table');
@@ -122,6 +117,15 @@ function renderTable(host, rows, state, actions, { showActions, showPeriod, empt
     <tbody></tbody>
   `;
   const tbody = table.querySelector('tbody');
+
+  if (!rows.length) {
+    const colCount = table.querySelectorAll('thead th').length;
+    tbody.innerHTML = `<tr class="table-empty-row"><td colspan="${colCount}">${emptyText}</td></tr>`;
+    box.appendChild(table);
+    host.innerHTML = '';
+    host.appendChild(box);
+    return;
+  }
 
   rows.forEach((r) => {
     const cls = pctClass(r.pct);

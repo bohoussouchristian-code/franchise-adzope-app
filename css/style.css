@@ -463,6 +463,12 @@ tr.total-row td { font-weight: 700; background: #fafbfd; }
   color: var(--muted);
 }
 
+.table-empty-row td {
+  text-align: center;
+  padding: 28px 20px;
+  color: var(--muted);
+}
+
 .badge-outlet, .badge-agent {
   background: var(--primary-soft);
   color: var(--primary-dark);
