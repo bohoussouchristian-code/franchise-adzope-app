@@ -3,9 +3,6 @@ import { getObjectiveEntry, upsertObjective, removeObjectiveEntry, listObjective
 import { openModal, closeModal } from './modal.js';
 
 let ui = {
-  year: null,
-  month: new Date().getMonth(),
-  agentId: 'ALL',
   histAgentId: 'ALL',
   histYear: 'ALL',
 };
@@ -13,27 +10,18 @@ let ui = {
 // ---------- Page : Suivi du mois ----------
 
 export function renderObjectifsSuivi(root, state, actions) {
-  if (ui.year === null) ui.year = state.meta.year;
+  const now = new Date();
+  const year = state.meta.year || now.getFullYear();
+  const monthIndex0 = now.getFullYear() === year ? now.getMonth() : 0;
 
   const wrap = document.createElement('div');
   wrap.innerHTML = `
     <div class="page-head-row">
       <div>
         <h1 class="page-title">Objectifs — Suivi du mois</h1>
-        <p class="page-sub">Fixez l'objectif d'un vendeur et suivez sa progression.</p>
+        <p class="page-sub">${MONTH_NAMES_FR[monthIndex0]} ${year} — tous les vendeurs.</p>
       </div>
       <button class="btn btn-primary" id="btnNewObjective" ${state.agents.length ? '' : 'disabled'}>+ Nouvel objectif</button>
-    </div>
-    <div class="toolbar">
-      <label class="field">Année
-        <select id="fYear"></select>
-      </label>
-      <label class="field">Mois
-        <select id="fMonth"></select>
-      </label>
-      <label class="field">Vendeur
-        <select id="fAgent"><option value="ALL">Tous</option></select>
-      </label>
     </div>
     <div id="tableHost"></div>
   `;
@@ -47,28 +35,13 @@ export function renderObjectifsSuivi(root, state, actions) {
   wrap.querySelector('#btnNewObjective').addEventListener('click', () => {
     openObjectiveSheet(state, actions, {
       agentId: state.agents[0].id,
-      year: ui.year,
-      monthIndex0: ui.month,
+      year,
+      monthIndex0,
     });
   });
 
-  const yearSel = wrap.querySelector('#fYear');
-  [state.meta.year, ui.year, new Date().getFullYear()]
-    .filter((v, i, a) => a.indexOf(v) === i).sort()
-    .forEach((y) => addOption(yearSel, y, y, y === ui.year));
-
-  const monthSel = wrap.querySelector('#fMonth');
-  MONTH_NAMES_FR.forEach((m, i) => addOption(monthSel, i, m, i === ui.month));
-
-  const agentSel = wrap.querySelector('#fAgent');
-  state.agents.forEach((a) => addOption(agentSel, a.id, a.name, a.id === ui.agentId));
-
-  yearSel.addEventListener('change', (e) => { ui.year = Number(e.target.value); actions.rerender(); });
-  monthSel.addEventListener('change', (e) => { ui.month = Number(e.target.value); actions.rerender(); });
-  agentSel.addEventListener('change', (e) => { ui.agentId = e.target.value; actions.rerender(); });
-
-  const mKey = monthKey(ui.year, ui.month);
-  const rows = listObjectiveRows(state, { agentId: ui.agentId, year: ui.year }).filter((r) => r.mKey === mKey);
+  const mKey = monthKey(year, monthIndex0);
+  const rows = listObjectiveRows(state, { agentId: 'ALL', year }).filter((r) => r.mKey === mKey);
 
   renderTable(wrap.querySelector('#tableHost'), rows, state, actions, { showActions: true, emptyText: 'Aucun objectif fixé pour ce mois. Cliquez sur « + Nouvel objectif » pour en créer un.' });
 }
@@ -239,7 +212,6 @@ function openObjectiveSheet(state, actions, { agentId, year, monthIndex0 }) {
           upsertObjective(s, fAgentId, p.id, fMKey, { objective, weeks, comment });
         });
       });
-      ui.month = Number(monthSel.value);
       closeModal();
     });
   });
