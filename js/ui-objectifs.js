@@ -5,6 +5,7 @@ import { openModal, closeModal } from './modal.js';
 let ui = {
   histAgentId: 'ALL',
   histYear: 'ALL',
+  histMonth: 'ALL',
 };
 
 // ---------- Page : Suivi du mois ----------
@@ -57,6 +58,9 @@ export function renderObjectifsHistorique(root, state, actions) {
       <label class="field">Vendeur
         <select id="hAgent"><option value="ALL">Tous</option></select>
       </label>
+      <label class="field">Mois
+        <select id="hMonth"><option value="ALL">Tous</option></select>
+      </label>
       <label class="field">Année
         <select id="hYear"><option value="ALL">Toutes</option></select>
       </label>
@@ -68,6 +72,9 @@ export function renderObjectifsHistorique(root, state, actions) {
   const agentSel = wrap.querySelector('#hAgent');
   state.agents.forEach((a) => addOption(agentSel, a.id, a.name, a.id === ui.histAgentId));
 
+  const monthSel = wrap.querySelector('#hMonth');
+  MONTH_NAMES_FR.forEach((m, i) => addOption(monthSel, i, m, String(i) === String(ui.histMonth)));
+
   const years = new Set();
   Object.values(state.objectives).forEach((byProduct) => {
     Object.values(byProduct).forEach((byMonth) => {
@@ -78,9 +85,11 @@ export function renderObjectifsHistorique(root, state, actions) {
   [...years].sort((a, b) => b - a).forEach((y) => addOption(yearSel, y, y, String(y) === String(ui.histYear)));
 
   agentSel.addEventListener('change', (e) => { ui.histAgentId = e.target.value; actions.rerender(); });
+  monthSel.addEventListener('change', (e) => { ui.histMonth = e.target.value === 'ALL' ? 'ALL' : Number(e.target.value); actions.rerender(); });
   yearSel.addEventListener('change', (e) => { ui.histYear = e.target.value === 'ALL' ? 'ALL' : Number(e.target.value); actions.rerender(); });
 
-  const rows = listObjectiveRows(state, { agentId: ui.histAgentId, year: ui.histYear });
+  let rows = listObjectiveRows(state, { agentId: ui.histAgentId, year: ui.histYear });
+  if (ui.histMonth !== 'ALL') rows = rows.filter((r) => r.monthIndex0 === ui.histMonth);
   renderTable(wrap.querySelector('#tableHost'), rows, state, actions, { showActions: false, showPeriod: true, emptyText: 'Aucun objectif enregistré pour ces filtres.' });
 }
 
