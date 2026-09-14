@@ -17,11 +17,13 @@ const logoutBtn = document.getElementById('btnLogout');
 let state = loadState();
 let currentTab = 'dashboard';
 
-if (isSessionActive()) {
-  startApp();
-} else {
-  showLogin();
-}
+const pages = {
+  dashboard: renderDashboard,
+  objectifs: renderObjectifs,
+  abonnements: renderAbonnements,
+  equipe: renderEquipe,
+  export: renderExport,
+};
 
 function showLogin() {
   appRoot.hidden = true;
@@ -36,19 +38,6 @@ function startApp() {
   appRoot.hidden = false;
   rerender();
 }
-
-logoutBtn.addEventListener('click', () => {
-  closeSession();
-  showLogin();
-});
-
-const pages = {
-  dashboard: renderDashboard,
-  objectifs: renderObjectifs,
-  abonnements: renderAbonnements,
-  equipe: renderEquipe,
-  export: renderExport,
-};
 
 function commit(mutator) {
   mutator(state);
@@ -70,8 +59,19 @@ function goTo(tab) {
   rerender();
 }
 
+logoutBtn.addEventListener('click', () => {
+  closeSession();
+  showLogin();
+});
+
 tabsEl.addEventListener('click', (e) => {
   const btn = e.target.closest('.tab');
   if (!btn) return;
   goTo(btn.dataset.tab);
 });
+
+if (isSessionActive()) {
+  startApp();
+} else {
+  showLogin();
+}

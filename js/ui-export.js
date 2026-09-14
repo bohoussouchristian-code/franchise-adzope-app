@@ -1,7 +1,7 @@
 import { MONTH_NAMES_FR, monthKey, fmtNum, escapeHtml } from './utils.js';
 import { computeProductMonth, computeProductPeriod, addSubscription, resetState } from './store.js';
 import { findHeaderRow, buildColumnMap, parseSubscriptionRows } from './import-parser.js';
-import { verifyPassword, setPassword } from './auth.js';
+import { verifyPassword, changePassword, getIdentifier } from './auth.js';
 
 let pendingImport = null;
 
@@ -42,6 +42,7 @@ export function renderExport(root, state, actions) {
     <div class="section">
       <h3 class="section-title">Sécurité</h3>
       <div class="card">
+        <p class="small muted">Identifiant de connexion : <b>${escapeHtml(getIdentifier() || '—')}</b></p>
         <form id="pwForm" class="form-grid" style="max-width:420px">
           <label class="field">Mot de passe actuel
             <input type="password" id="pwCurrent" autocomplete="current-password" required>
@@ -101,7 +102,7 @@ function handlePasswordChange(wrap) {
     if (next !== next2) { show('Les deux nouveaux mots de passe ne correspondent pas.', true); return; }
     if (next.length < 4) { show('Le nouveau mot de passe doit contenir au moins 4 caractères.', true); return; }
 
-    await setPassword(next);
+    await changePassword(next);
     wrap.querySelector('#pwForm').reset();
     show('Mot de passe modifié avec succès.', false);
   };

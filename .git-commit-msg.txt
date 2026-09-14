@@ -1,0 +1,12 @@
+Exige un identifiant (e-mail ou telephone) en plus du mot de passe
+
+La connexion demande desormais un couple identifiant + mot de passe
+plutot qu'un mot de passe seul (creation au premier lancement, stocke
+hache en SHA-256). L'onglet Export / Sauvegarde affiche l'identifiant
+actuel et permet toujours de changer le mot de passe.
+
+Corrige aussi une ReferenceError (acces a `pages` avant son
+initialisation) qui se produisait quand une session etait deja active
+au chargement de la page.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>

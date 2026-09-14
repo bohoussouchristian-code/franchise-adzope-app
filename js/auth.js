@@ -3,7 +3,7 @@
 // d'éviter qu'une personne tombant sur le lien n'accède directement aux données,
 // pas de protéger des données hautement sensibles.
 
-const AUTH_KEY = 'fa2026_auth_v1';
+const AUTH_KEY = 'fa2026_auth_v2';
 const SESSION_KEY = 'fa2026_session_v1';
 
 async function sha256Hex(text) {
@@ -16,14 +16,37 @@ function randomSalt() {
   return [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-export function hasPassword() {
+function normalizeIdentifier(identifier) {
+  return String(identifier || '').trim().toLowerCase();
+}
+
+export function hasAccount() {
   return !!localStorage.getItem(AUTH_KEY);
 }
 
-export async function setPassword(password) {
+export function getIdentifier() {
+  const raw = localStorage.getItem(AUTH_KEY);
+  if (!raw) return null;
+  return JSON.parse(raw).identifier || null;
+}
+
+export async function setCredentials(identifier, password) {
   const salt = randomSalt();
   const hash = await sha256Hex(salt + password);
-  localStorage.setItem(AUTH_KEY, JSON.stringify({ salt, hash }));
+  localStorage.setItem(AUTH_KEY, JSON.stringify({
+    identifier: String(identifier || '').trim(),
+    salt,
+    hash,
+  }));
+}
+
+export async function verifyCredentials(identifier, password) {
+  const raw = localStorage.getItem(AUTH_KEY);
+  if (!raw) return false;
+  const { identifier: storedIdentifier, salt, hash } = JSON.parse(raw);
+  if (normalizeIdentifier(identifier) !== normalizeIdentifier(storedIdentifier)) return false;
+  const attempt = await sha256Hex(salt + password);
+  return attempt === hash;
 }
 
 export async function verifyPassword(password) {
@@ -32,6 +55,13 @@ export async function verifyPassword(password) {
   const { salt, hash } = JSON.parse(raw);
   const attempt = await sha256Hex(salt + password);
   return attempt === hash;
+}
+
+export async function changePassword(newPassword) {
+  const raw = localStorage.getItem(AUTH_KEY);
+  if (!raw) return;
+  const { identifier } = JSON.parse(raw);
+  await setCredentials(identifier, newPassword);
 }
 
 export function isSessionActive() {
