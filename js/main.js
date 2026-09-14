@@ -6,11 +6,11 @@ import { renderEvaluations, renderOutlets } from './ui-notation.js';
 import { renderNouvelAbonnement, renderHistoriqueAbonnements } from './ui-abonnements.js';
 import { renderNouvelleFibre, renderHistoriqueFibre } from './ui-fibre.js';
 import { renderNouvelleVenteSmartphone, renderHistoriqueVentesSmartphones } from './ui-smartphones.js';
-import { renderEquipeVendeurs, renderEquipePointsDeVente } from './ui-equipe.js';
 import { renderExport } from './ui-export.js';
 import { renderParametres } from './ui-parametres.js';
 import { renderLogin } from './ui-login.js';
-import { isSessionActive, closeSession, getCurrentAdmin } from './auth.js';
+import { isSessionActive, closeSession, getCurrentUser } from './auth.js';
+import { tabAllowedForScope } from './permissions.js';
 
 const loginRoot = document.getElementById('loginRoot');
 const appRoot = document.getElementById('appRoot');
@@ -38,11 +38,11 @@ const pages = {
   'fibre-historique': renderHistoriqueFibre,
   'smartphones-nouveau': renderNouvelleVenteSmartphone,
   'smartphones-historique': renderHistoriqueVentesSmartphones,
-  'equipe-vendeurs': renderEquipeVendeurs,
-  'equipe-points': renderEquipePointsDeVente,
   export: renderExport,
   parametres: renderParametres,
 };
+
+const ROLE_LABELS = { admin: 'Administrateur', vendeur: 'Vendeur', outlet: 'Point de vente' };
 
 function showLogin() {
   appRoot.hidden = true;
@@ -64,19 +64,41 @@ function commit(mutator) {
   rerender();
 }
 
+function currentScope() {
+  const user = getCurrentUser();
+  if (!user) return { role: 'admin', agentId: null, outletId: null, permissions: {} };
+  return { role: user.role, agentId: user.agentId, outletId: user.outletId, permissions: user.permissions };
+}
+
+function applyRoleVisibility(scope) {
+  [...tabsEl.querySelectorAll('.tab[data-tab]')].forEach((el) => {
+    el.hidden = !tabAllowedForScope(el.dataset.tab, scope);
+  });
+  [...tabsEl.querySelectorAll('.side-group')].forEach((g) => {
+    const hasVisibleChild = !!g.querySelector('.side-sublink:not([hidden])');
+    g.hidden = !hasVisibleChild;
+  });
+}
+
 function rerender() {
   brandTitle.textContent = (state.meta.franchiseName || 'FRANCHISE').toUpperCase();
-  const admin = getCurrentAdmin();
-  if (admin) {
-    userAvatar.textContent = admin.name.trim().charAt(0).toUpperCase();
-    userName.textContent = admin.name;
-    userRole.textContent = admin.identifier;
+  const user = getCurrentUser();
+  const scope = currentScope();
+  if (user) {
+    userAvatar.textContent = user.name.trim().charAt(0).toUpperCase();
+    userName.textContent = user.name;
+    userRole.textContent = ROLE_LABELS[user.role] || user.role;
+  }
+  applyRoleVisibility(scope);
+  if (!tabAllowedForScope(currentTab, scope)) {
+    currentTab = 'dashboard';
   }
   view.innerHTML = '';
-  pages[currentTab](view, state, { commit, rerender, goTo });
+  pages[currentTab](view, state, { commit, rerender, goTo, scope });
 }
 
 function goTo(tab) {
+  if (!tabAllowedForScope(tab, currentScope())) return;
   currentTab = tab;
   [...tabsEl.querySelectorAll('.tab')].forEach((b) => {
     b.classList.toggle('active', b.dataset.tab === tab);

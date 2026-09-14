@@ -14,13 +14,16 @@ export function renderObjectifsSuivi(root, state, actions) {
   const now = new Date();
   const year = state.meta.year || now.getFullYear();
   const monthIndex0 = now.getFullYear() === year ? now.getMonth() : 0;
+  const isVendeur = actions.scope.role === 'vendeur';
+  const scopedAgentId = isVendeur ? actions.scope.agentId : 'ALL';
+  const scopedAgent = isVendeur ? state.agents.find((a) => a.id === scopedAgentId) : null;
 
   const wrap = document.createElement('div');
   wrap.innerHTML = `
     <div class="page-head-row">
       <div>
         <h1 class="page-title">Objectifs — Suivi du mois</h1>
-        <p class="page-sub">${MONTH_NAMES_FR[monthIndex0]} ${year} — tous les vendeurs.</p>
+        <p class="page-sub">${MONTH_NAMES_FR[monthIndex0]} ${year}${isVendeur ? ` — ${escapeHtml(scopedAgent ? scopedAgent.name : '')}` : ' — tous les vendeurs.'}</p>
       </div>
       <button class="btn btn-primary" id="btnNewObjective" ${state.agents.length ? '' : 'disabled'}>+ Nouvel objectif</button>
     </div>
@@ -28,21 +31,21 @@ export function renderObjectifsSuivi(root, state, actions) {
   `;
   root.appendChild(wrap);
 
-  if (!state.agents.length) {
-    wrap.querySelector('#tableHost').innerHTML = `<div class="empty-state">Ajoutez d'abord un vendeur dans l'onglet « Équipe &amp; Points de vente ».</div>`;
+  if (!state.agents.length || (isVendeur && !scopedAgent)) {
+    wrap.querySelector('#tableHost').innerHTML = `<div class="empty-state">Ajoutez d'abord un vendeur dans « Paramètres ».</div>`;
     return;
   }
 
   wrap.querySelector('#btnNewObjective').addEventListener('click', () => {
     openObjectiveSheet(state, actions, {
-      agentId: state.agents[0].id,
+      agentId: isVendeur ? scopedAgentId : state.agents[0].id,
       year,
       monthIndex0,
     });
   });
 
   const mKey = monthKey(year, monthIndex0);
-  const rows = listObjectiveRows(state, { agentId: 'ALL', year }).filter((r) => r.mKey === mKey);
+  const rows = listObjectiveRows(state, { agentId: scopedAgentId, year }).filter((r) => r.mKey === mKey);
 
   renderTable(wrap.querySelector('#tableHost'), rows, state, actions, { showActions: true, emptyText: 'Aucun objectif fixé pour ce mois. Cliquez sur « + Nouvel objectif » pour en créer un.' });
 }
@@ -50,14 +53,18 @@ export function renderObjectifsSuivi(root, state, actions) {
 // ---------- Page : Historique des objectifs ----------
 
 export function renderObjectifsHistorique(root, state, actions) {
+  const isVendeur = actions.scope.role === 'vendeur';
+  if (isVendeur) ui.histAgentId = actions.scope.agentId;
+
   const wrap = document.createElement('div');
   wrap.innerHTML = `
     <h1 class="page-title">Historique des objectifs</h1>
-    <p class="page-sub">Retrace tous les objectifs assignés à chaque vendeur, tous mois confondus.</p>
+    <p class="page-sub">Retrace tous les objectifs assignés${isVendeur ? '' : ' à chaque vendeur'}, tous mois confondus.</p>
     <div class="toolbar">
+      ${isVendeur ? '' : `
       <label class="field">Vendeur
         <select id="hAgent"><option value="ALL">Tous</option></select>
-      </label>
+      </label>`}
       <label class="field">Mois
         <select id="hMonth"><option value="ALL">Tous</option></select>
       </label>
@@ -69,8 +76,11 @@ export function renderObjectifsHistorique(root, state, actions) {
   `;
   root.appendChild(wrap);
 
-  const agentSel = wrap.querySelector('#hAgent');
-  state.agents.forEach((a) => addOption(agentSel, a.id, a.name, a.id === ui.histAgentId));
+  if (!isVendeur) {
+    const agentSel = wrap.querySelector('#hAgent');
+    state.agents.forEach((a) => addOption(agentSel, a.id, a.name, a.id === ui.histAgentId));
+    agentSel.addEventListener('change', (e) => { ui.histAgentId = e.target.value; actions.rerender(); });
+  }
 
   const monthSel = wrap.querySelector('#hMonth');
   MONTH_NAMES_FR.forEach((m, i) => addOption(monthSel, i, m, String(i) === String(ui.histMonth)));
@@ -84,7 +94,6 @@ export function renderObjectifsHistorique(root, state, actions) {
   const yearSel = wrap.querySelector('#hYear');
   [...years].sort((a, b) => b - a).forEach((y) => addOption(yearSel, y, y, String(y) === String(ui.histYear)));
 
-  agentSel.addEventListener('change', (e) => { ui.histAgentId = e.target.value; actions.rerender(); });
   monthSel.addEventListener('change', (e) => { ui.histMonth = e.target.value === 'ALL' ? 'ALL' : Number(e.target.value); actions.rerender(); });
   yearSel.addEventListener('change', (e) => { ui.histYear = e.target.value === 'ALL' ? 'ALL' : Number(e.target.value); actions.rerender(); });
 
@@ -178,6 +187,7 @@ function renderTable(host, rows, state, actions, { showActions, showPeriod, empt
 // ---------- Formulaire "+ Nouvel objectif" : une fiche, tous les produits, un vendeur ----------
 
 function openObjectiveSheet(state, actions, { agentId, year, monthIndex0 }) {
+  const isVendeur = actions.scope.role === 'vendeur';
   const agent = state.agents.find((a) => a.id === agentId) || state.agents[0];
 
   openModal(`
@@ -186,7 +196,9 @@ function openObjectiveSheet(state, actions, { agentId, year, monthIndex0 }) {
 
     <div class="form-grid sheet-context">
       <label class="field">Vendeur
-        <select id="sheetAgent">${state.agents.map((a) => `<option value="${a.id}" ${a.id === agent.id ? 'selected' : ''}>${escapeHtml(a.name)}</option>`).join('')}</select>
+        ${isVendeur
+          ? `<input type="text" value="${escapeHtml(agent ? agent.name : '')}" disabled>`
+          : `<select id="sheetAgent">${state.agents.map((a) => `<option value="${a.id}" ${a.id === agent.id ? 'selected' : ''}>${escapeHtml(a.name)}</option>`).join('')}</select>`}
       </label>
       <label class="field">Mois
         <select id="sheetMonth">${MONTH_NAMES_FR.map((m, i) => `<option value="${i}" ${i === monthIndex0 ? 'selected' : ''}>${m}</option>`).join('')}</select>
@@ -205,16 +217,17 @@ function openObjectiveSheet(state, actions, { agentId, year, monthIndex0 }) {
 
     const agentSel = modalEl.querySelector('#sheetAgent');
     const monthSel = modalEl.querySelector('#sheetMonth');
+    const getAgentId = () => (isVendeur ? agent.id : agentSel.value);
 
-    const refresh = () => fillSheetProducts(modalEl.querySelector('#sheetProducts'), state, agentSel.value, year, Number(monthSel.value));
-    agentSel.addEventListener('change', refresh);
+    const refresh = () => fillSheetProducts(modalEl.querySelector('#sheetProducts'), state, getAgentId(), year, Number(monthSel.value));
+    if (agentSel) agentSel.addEventListener('change', refresh);
     monthSel.addEventListener('change', refresh);
     refresh();
 
     modalEl.querySelector('#sheetForm').addEventListener('submit', (e) => {
       e.preventDefault();
       const fd = new FormData(e.target);
-      const fAgentId = agentSel.value;
+      const fAgentId = getAgentId();
       const fMKey = monthKey(year, Number(monthSel.value));
 
       actions.commit((s) => {

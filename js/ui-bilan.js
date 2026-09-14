@@ -4,6 +4,10 @@ import { computeProductPeriod } from './store.js';
 let ui = { year: null, periodType: 'quarter', month: new Date().getMonth(), quarter: Math.floor(new Date().getMonth() / 3) + 1, agentId: 'ALL' };
 
 export function renderBilan(root, state, actions) {
+  if (actions.scope.role !== 'admin') {
+    root.innerHTML = `<h1 class="page-title">Bilan des activités</h1><div class="empty-state">Accès réservé aux administrateurs.</div>`;
+    return;
+  }
   if (ui.year === null) ui.year = state.meta.year;
 
   const wrap = document.createElement('div');

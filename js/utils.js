@@ -93,6 +93,16 @@ export function escapeHtml(str) {
     .replaceAll('"', '&quot;');
 }
 
+// Champ "Vendeur"/"Point de vente" d'un formulaire : verrouillé (texte + input
+// caché) quand le compte connecté est restreint à une seule entité, sinon un
+// <select> normal. Utilisé par les modules Abonnements/Fibre/Smartphones.
+export function selectOrLocked(name, options, lockedId, lockedLabel) {
+  if (lockedId) {
+    return `<input type="text" value="${escapeHtml(lockedLabel)}" disabled><input type="hidden" name="${name}" value="${escapeHtml(lockedId)}">`;
+  }
+  return `<select name="${name}"><option value="">—</option>${options}</select>`;
+}
+
 export function debounce(fn, wait = 300) {
   let t;
   return (...args) => {

@@ -2,30 +2,30 @@
 // tableur). Les indicateurs chiffrés vivent désormais dans « Bilan des
 // activités ».
 
+import { tabAllowedForScope } from './permissions.js';
+
 const ICONS = {
   chart: '<svg viewBox="0 0 24 24"><path d="M3 13h8V3H3v10Zm0 8h8v-6H3v6Zm10 0h8V11h-8v10Zm0-18v6h8V3h-8Z"/></svg>',
   target: '<svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Zm0 16a6 6 0 1 1 6-6 6 6 0 0 1-6 6Zm0-9a3 3 0 1 0 3 3 3 3 0 0 0-3-3Z"/></svg>',
   wifi: '<svg viewBox="0 0 24 24"><path d="M4 8a8 8 0 0 1 16 0h-2a6 6 0 0 0-12 0Zm3 0a5 5 0 0 1 10 0h-2a3 3 0 0 0-6 0Zm2 0a3 3 0 0 1 6 0h-2a1 1 0 0 0-2 0Z"/><circle cx="12" cy="17" r="2"/></svg>',
   fibre: '<svg viewBox="0 0 24 24"><path d="M12 2 2 7l10 5 10-5Zm0 7.5L4 5.7v9.6l8 4 8-4V5.7Z"/></svg>',
   phone: '<svg viewBox="0 0 24 24"><path d="M7 2h10a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Zm0 3v13h10V5Zm5 14.2a1 1 0 1 0 0 2 1 1 0 0 0 0-2Z"/></svg>',
-  users: '<svg viewBox="0 0 24 24"><path d="M16 11a4 4 0 1 0-4-4 4 4 0 0 0 4 4Zm-8 0a4 4 0 1 0-4-4 4 4 0 0 0 4 4Zm0 2c-2.7 0-8 1.3-8 4v3h10v-3c0-1.2.5-2.2 1.3-3.1A13.4 13.4 0 0 0 8 13Zm8 0c-.6 0-1.3 0-2 .1.9.9 1.5 2 1.5 3.4v3.5h8.5v-3c0-2.7-5.3-4-8-4Z"/></svg>',
   export: '<svg viewBox="0 0 24 24"><path d="M5 20h14v-2H5Zm7-16-5.5 5.5 1.4 1.4L11 8.8V17h2V8.8l3.1 3.1 1.4-1.4Z"/></svg>',
 };
 
 const MODULES = [
-  {
-    code: 'BIL', title: 'Bilan des activités', icon: 'chart', tab: 'bilan',
-    links: [
-      { label: 'Voir le bilan', tab: 'bilan' },
-    ],
-  },
   {
     code: 'OBJ', title: 'Objectifs', icon: 'target', tab: 'objectifs-suivi',
     links: [
       { label: 'Suivi du mois', tab: 'objectifs-suivi' },
       { label: 'Historique des objectifs', tab: 'objectifs-historique' },
       { label: 'Évaluation des vendeurs', tab: 'objectifs-evaluation' },
-      { label: 'Fréquentation & Client mystère', tab: 'objectifs-outlets' },
+    ],
+  },
+  {
+    code: 'FRQ', title: 'Fréquentation & Client mystère', icon: 'target', tab: 'objectifs-outlets',
+    links: [
+      { label: 'Voir la saisie', tab: 'objectifs-outlets' },
     ],
   },
   {
@@ -50,21 +50,25 @@ const MODULES = [
     ],
   },
   {
-    code: 'EQP', title: 'Équipe & Points de vente', icon: 'users', tab: 'equipe-vendeurs',
-    links: [
-      { label: 'Vendeurs', tab: 'equipe-vendeurs' },
-      { label: 'Points de vente', tab: 'equipe-points' },
-    ],
-  },
-  {
     code: 'EXP', title: 'Export / Sauvegarde', icon: 'export', tab: 'export',
     links: [
       { label: 'Exporter, sauvegarder, importer', tab: 'export' },
     ],
   },
+  {
+    code: 'BIL', title: 'Bilan des activités', icon: 'chart', tab: 'bilan',
+    links: [
+      { label: 'Voir le bilan', tab: 'bilan' },
+    ],
+  },
 ];
 
 export function renderDashboard(root, state, actions) {
+  const scope = actions.scope;
+  const modules = MODULES
+    .map((mod) => ({ ...mod, links: mod.links.filter((l) => tabAllowedForScope(l.tab, scope)) }))
+    .filter((mod) => mod.links.length);
+
   const wrap = document.createElement('div');
   wrap.innerHTML = `
     <h1 class="page-title">Tableau de bord</h1>
@@ -74,7 +78,7 @@ export function renderDashboard(root, state, actions) {
   root.appendChild(wrap);
 
   const grid = wrap.querySelector('#moduleGrid');
-  MODULES.forEach((mod) => grid.appendChild(buildModuleCard(mod)));
+  modules.forEach((mod) => grid.appendChild(buildModuleCard(mod)));
 
   grid.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-goto]');
@@ -85,8 +89,9 @@ export function renderDashboard(root, state, actions) {
 function buildModuleCard(mod) {
   const card = document.createElement('div');
   card.className = 'module-card';
+  const iconTarget = mod.links.some((l) => l.tab === mod.tab) ? mod.tab : mod.links[0].tab;
   card.innerHTML = `
-    <button class="module-icon" data-goto="${mod.tab}">${ICONS[mod.icon]}</button>
+    <button class="module-icon" data-goto="${iconTarget}">${ICONS[mod.icon]}</button>
     <div class="module-code">${mod.code}</div>
     <div class="module-title">${mod.title}</div>
     <div class="module-sep"></div>

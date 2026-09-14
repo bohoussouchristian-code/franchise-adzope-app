@@ -16,11 +16,13 @@ let ui = {
 
 export function renderEvaluations(host, state, actions) {
   if (ui.year === null) ui.year = state.meta.year;
+  const isVendeur = actions.scope.role === 'vendeur';
+  if (isVendeur) ui.agentId = actions.scope.agentId;
 
   if (!state.agents.length) {
     host.innerHTML = `
       <h1 class="page-title">Évaluation des vendeurs</h1>
-      <div class="empty-state">Ajoutez d'abord un vendeur dans l'onglet « Équipe &amp; Points de vente ».</div>
+      <div class="empty-state">Ajoutez d'abord un vendeur dans « Paramètres ».</div>
     `;
     return;
   }
@@ -31,37 +33,40 @@ export function renderEvaluations(host, state, actions) {
         <h1 class="page-title">Évaluation des vendeurs</h1>
         <p class="page-sub">Notation individuelle (assiduité, hiérarchie, dynamisme...), séparée des objectifs commerciaux.</p>
       </div>
-      <button class="btn btn-primary" id="btnNewEval">+ Nouvelle évaluation</button>
+      ${isVendeur ? '' : '<button class="btn btn-primary" id="btnNewEval">+ Nouvelle évaluation</button>'}
     </div>
     <div class="toolbar">
       <label class="field">Mois
         <select id="fMonth"></select>
       </label>
+      ${isVendeur ? '' : `
       <label class="field">Vendeur
         <select id="fAgent"><option value="ALL">Tous</option></select>
-      </label>
+      </label>`}
     </div>
     <div id="tableHost"></div>
   `;
 
   const monthSel = host.querySelector('#fMonth');
   MONTH_NAMES_FR.forEach((m, i) => addOption(monthSel, i, m, i === ui.month));
-  const agentSel = host.querySelector('#fAgent');
-  state.agents.forEach((a) => addOption(agentSel, a.id, a.name, a.id === ui.agentId));
-
   monthSel.addEventListener('change', (e) => { ui.month = Number(e.target.value); actions.rerender(); });
-  agentSel.addEventListener('change', (e) => { ui.agentId = e.target.value; actions.rerender(); });
 
-  host.querySelector('#btnNewEval').addEventListener('click', () => {
-    openEvaluationForm(state, actions, { agentId: state.agents[0].id, monthIndex0: ui.month });
-  });
+  if (!isVendeur) {
+    const agentSel = host.querySelector('#fAgent');
+    state.agents.forEach((a) => addOption(agentSel, a.id, a.name, a.id === ui.agentId));
+    agentSel.addEventListener('change', (e) => { ui.agentId = e.target.value; actions.rerender(); });
+
+    host.querySelector('#btnNewEval').addEventListener('click', () => {
+      openEvaluationForm(state, actions, { agentId: state.agents[0].id, monthIndex0: ui.month });
+    });
+  }
 
   const mKey = monthKey(ui.year, ui.month);
   const rows = listEvaluationRows(state, { agentId: ui.agentId, year: ui.year }).filter((r) => r.mKey === mKey);
-  renderEvalTable(host.querySelector('#tableHost'), rows, state, actions);
+  renderEvalTable(host.querySelector('#tableHost'), rows, state, actions, { readOnly: isVendeur });
 }
 
-function renderEvalTable(host, rows, state, actions) {
+function renderEvalTable(host, rows, state, actions, { readOnly } = {}) {
   const box = document.createElement('div');
   box.className = 'table-wrap';
   const table = document.createElement('table');
@@ -74,7 +79,7 @@ function renderEvalTable(host, rows, state, actions) {
         <th>GAP</th>
         <th>%</th>
         <th>Commentaire</th>
-        <th></th>
+        ${readOnly ? '' : '<th></th>'}
       </tr>
     </thead>
     <tbody></tbody>
@@ -83,7 +88,7 @@ function renderEvalTable(host, rows, state, actions) {
 
   if (!rows.length) {
     const colCount = table.querySelectorAll('thead th').length;
-    tbody.innerHTML = `<tr class="table-empty-row"><td colspan="${colCount}">Aucune évaluation pour ce mois. Cliquez sur « + Nouvelle évaluation » pour en créer une.</td></tr>`;
+    tbody.innerHTML = `<tr class="table-empty-row"><td colspan="${colCount}">Aucune évaluation pour ce mois.</td></tr>`;
     box.appendChild(table);
     host.innerHTML = '';
     host.appendChild(box);
@@ -100,28 +105,31 @@ function renderEvalTable(host, rows, state, actions) {
       <td class="right">${r.gap >= 0 ? '+' : ''}${fmtNum(r.gap)}</td>
       <td><span class="pill ${cls}">${fmtPct(r.pct)}</span></td>
       <td class="muted">${escapeHtml(r.comment) || '—'}</td>
+      ${readOnly ? '' : `
       <td>
         <button class="btn btn-sm" data-edit="${r.agentId}|${r.mKey}">Modifier</button>
         <button class="btn btn-sm btn-danger" data-del="${r.agentId}|${r.mKey}">Suppr.</button>
-      </td>
+      </td>`}
     `;
     tbody.appendChild(tr);
   });
 
-  table.addEventListener('click', (e) => {
-    const editKey = e.target.dataset.edit;
-    const delKey = e.target.dataset.del;
-    if (editKey) {
-      const [agentId, mKey] = editKey.split('|');
-      const { monthIndex0 } = rows.find((r) => r.agentId === agentId && r.mKey === mKey);
-      openEvaluationForm(state, actions, { agentId, monthIndex0 });
-    } else if (delKey) {
-      const [agentId, mKey] = delKey.split('|');
-      if (confirm('Supprimer cette évaluation ?')) {
-        actions.commit((s) => removeEvaluationEntry(s, agentId, mKey));
+  if (!readOnly) {
+    table.addEventListener('click', (e) => {
+      const editKey = e.target.dataset.edit;
+      const delKey = e.target.dataset.del;
+      if (editKey) {
+        const [agentId, mKey] = editKey.split('|');
+        const { monthIndex0 } = rows.find((r) => r.agentId === agentId && r.mKey === mKey);
+        openEvaluationForm(state, actions, { agentId, monthIndex0 });
+      } else if (delKey) {
+        const [agentId, mKey] = delKey.split('|');
+        if (confirm('Supprimer cette évaluation ?')) {
+          actions.commit((s) => removeEvaluationEntry(s, agentId, mKey));
+        }
       }
-    }
-  });
+    });
+  }
 
   box.appendChild(table);
   host.innerHTML = '';
@@ -204,11 +212,13 @@ function openEvaluationForm(state, actions, { agentId, monthIndex0 }) {
 
 export function renderOutlets(host, state, actions) {
   if (ui.year === null) ui.year = state.meta.year;
+  const isOutlet = actions.scope.role === 'outlet';
+  if (isOutlet) ui.outletId = actions.scope.outletId;
 
-  if (!state.outlets.length) {
+  if (!state.outlets.length || (isOutlet && !state.outlets.some((o) => o.id === ui.outletId))) {
     host.innerHTML = `
       <h1 class="page-title">Fréquentation &amp; Client mystère</h1>
-      <div class="empty-state">Ajoutez d'abord un point de vente dans l'onglet « Équipe &amp; Points de vente ».</div>
+      <div class="empty-state">Ajoutez d'abord un point de vente dans « Paramètres ».</div>
     `;
     return;
   }
@@ -225,23 +235,26 @@ export function renderOutlets(host, state, actions) {
       <label class="field">Mois
         <select id="fMonth"></select>
       </label>
+      ${isOutlet ? '' : `
       <label class="field">Point de vente
         <select id="fOutlet"><option value="ALL">Tous</option></select>
-      </label>
+      </label>`}
     </div>
     <div id="tableHost"></div>
   `;
 
   const monthSel = host.querySelector('#fMonth');
   MONTH_NAMES_FR.forEach((m, i) => addOption(monthSel, i, m, i === ui.month));
-  const outletSel = host.querySelector('#fOutlet');
-  state.outlets.forEach((o) => addOption(outletSel, o.id, o.name, o.id === ui.outletId));
-
   monthSel.addEventListener('change', (e) => { ui.month = Number(e.target.value); actions.rerender(); });
-  outletSel.addEventListener('change', (e) => { ui.outletId = e.target.value; actions.rerender(); });
+
+  if (!isOutlet) {
+    const outletSel = host.querySelector('#fOutlet');
+    state.outlets.forEach((o) => addOption(outletSel, o.id, o.name, o.id === ui.outletId));
+    outletSel.addEventListener('change', (e) => { ui.outletId = e.target.value; actions.rerender(); });
+  }
 
   host.querySelector('#btnNewOutlet').addEventListener('click', () => {
-    openOutletForm(state, actions, { outletId: state.outlets[0].id, monthIndex0: ui.month });
+    openOutletForm(state, actions, { outletId: isOutlet ? ui.outletId : state.outlets[0].id, monthIndex0: ui.month });
   });
 
   const mKey = monthKey(ui.year, ui.month);
@@ -341,16 +354,20 @@ function renderOutletTable(host, rows, state, actions) {
 }
 
 function openOutletForm(state, actions, { outletId, monthIndex0 }) {
+  const isOutlet = actions.scope.role === 'outlet';
   const mKey = monthKey(ui.year, monthIndex0);
   const freq = getOutletMetricEntry(state, 'frequentation', outletId, mKey, false) || { objective: 0, realized: 0, comment: '' };
   const cm = getOutletMetricEntry(state, 'clientMystere', outletId, mKey, false) || { objective: 0, realized: 0, comment: '' };
+  const outlet = state.outlets.find((o) => o.id === outletId);
 
   openModal(`
     <h2>Fréquentation &amp; Client mystère</h2>
     <form id="outletForm">
       <div class="form-grid">
         <label class="field">Point de vente
-          <select id="ovOutlet">${state.outlets.map((o) => `<option value="${o.id}" ${o.id === outletId ? 'selected' : ''}>${escapeHtml(o.name)}</option>`).join('')}</select>
+          ${isOutlet
+            ? `<input type="text" value="${escapeHtml(outlet ? outlet.name : '')}" disabled>`
+            : `<select id="ovOutlet">${state.outlets.map((o) => `<option value="${o.id}" ${o.id === outletId ? 'selected' : ''}>${escapeHtml(o.name)}</option>`).join('')}</select>`}
         </label>
         <label class="field">Mois
           <select id="ovMonth">${MONTH_NAMES_FR.map((m, i) => `<option value="${i}" ${i === monthIndex0 ? 'selected' : ''}>${m}</option>`).join('')}</select>
@@ -392,7 +409,8 @@ function openOutletForm(state, actions, { outletId, monthIndex0 }) {
     modalEl.querySelector('#outletForm').addEventListener('submit', (e) => {
       e.preventDefault();
       const fd = new FormData(e.target);
-      const fOutletId = modalEl.querySelector('#ovOutlet').value;
+      const ovOutlet = modalEl.querySelector('#ovOutlet');
+      const fOutletId = ovOutlet ? ovOutlet.value : outletId;
       const fMonthIndex0 = Number(modalEl.querySelector('#ovMonth').value);
       const fMKey = monthKey(ui.year, fMonthIndex0);
       const comment = fd.get('comment') || '';

@@ -5,6 +5,10 @@ import { findHeaderRow, buildColumnMap, parseSubscriptionRows } from './import-p
 let pendingImport = null;
 
 export function renderExport(root, state, actions) {
+  if (actions.scope.role !== 'admin') {
+    root.innerHTML = `<h1 class="page-title">Export / Sauvegarde</h1><div class="empty-state">Accès réservé aux administrateurs.</div>`;
+    return;
+  }
   const wrap = document.createElement('div');
   wrap.innerHTML = `
     <h1 class="page-title">Export / Sauvegarde</h1>

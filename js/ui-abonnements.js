@@ -1,4 +1,4 @@
-import { MONTH_NAMES_FR, fmtNum, fmtDate, fmtMoney, escapeHtml, todayISO } from './utils.js';
+import { MONTH_NAMES_FR, fmtNum, fmtDate, fmtMoney, escapeHtml, todayISO, selectOrLocked } from './utils.js';
 import { addSubscription, updateSubscription, removeSubscription } from './store.js';
 import { openModal, closeModal } from './modal.js';
 
@@ -14,6 +14,7 @@ let ui = {
 // ---------- Page : Nouvel abonnement ----------
 
 export function renderNouvelAbonnement(root, state, actions) {
+  const { role, agentId: scopeAgentId, outletId: scopeOutletId } = actions.scope;
   const wrap = document.createElement('div');
   wrap.innerHTML = `
     <div class="page-head-row">
@@ -28,20 +29,31 @@ export function renderNouvelAbonnement(root, state, actions) {
   root.appendChild(wrap);
 
   if (!state.agents.length) {
-    wrap.querySelector('#tableHost').innerHTML = `<div class="empty-state">Ajoutez d'abord un vendeur dans « Équipe &amp; Points de vente » pour pouvoir enregistrer un abonnement.</div>`;
+    wrap.querySelector('#tableHost').innerHTML = `<div class="empty-state">Ajoutez d'abord un vendeur dans « Paramètres » pour pouvoir enregistrer un abonnement.</div>`;
     return;
   }
 
   wrap.querySelector('#btnAdd').addEventListener('click', () => openSubForm(state, actions, null));
 
   const today = todayISO();
-  const subs = state.subscriptions4gHome.filter((s) => s.dateCreation === today);
+  const subs = state.subscriptions4gHome.filter((s) => {
+    if (s.dateCreation !== today) return false;
+    if (role === 'vendeur' && s.agentId !== scopeAgentId) return false;
+    if (role === 'outlet' && s.outletId !== scopeOutletId) return false;
+    return true;
+  });
   renderSubsTable(wrap.querySelector('#tableHost'), subs, state, actions, { emptyText: "Aucun abonnement ajouté aujourd'hui pour l'instant. Cliquez sur « + Nouvel abonnement » pour en enregistrer un." });
 }
 
 // ---------- Page : Historique des abonnements ----------
 
 export function renderHistoriqueAbonnements(root, state, actions) {
+  const { role, agentId: scopeAgentId, outletId: scopeOutletId } = actions.scope;
+  const lockAgent = role === 'vendeur';
+  const lockOutlet = role === 'outlet';
+  if (lockAgent) ui.agentId = scopeAgentId;
+  if (lockOutlet) ui.outletId = scopeOutletId;
+
   const wrap = document.createElement('div');
   wrap.innerHTML = `
     <h1 class="page-title">Historique des abonnements</h1>
@@ -61,12 +73,14 @@ export function renderHistoriqueAbonnements(root, state, actions) {
           <option value="FDD">FDD (Easybox)</option>
         </select>
       </label>
+      ${lockAgent ? '' : `
       <label class="field">Vendeur
         <select id="fAgent"><option value="ALL">Tous</option></select>
-      </label>
+      </label>`}
+      ${lockOutlet ? '' : `
       <label class="field">Point de vente
         <select id="fOutlet"><option value="ALL">Tous</option></select>
-      </label>
+      </label>`}
       <label class="field">Recherche
         <input type="search" id="fSearch" placeholder="Nom, n° client, n° facture..." value="${escapeHtml(ui.search)}">
       </label>
@@ -89,19 +103,23 @@ export function renderHistoriqueAbonnements(root, state, actions) {
   const monthSel = wrap.querySelector('#fMonth');
   MONTH_NAMES_FR.forEach((m, i) => addOption(monthSel, i, m, String(ui.month) === String(i)));
 
-  const agentSel = wrap.querySelector('#fAgent');
-  state.agents.forEach((a) => addOption(agentSel, a.id, a.name, a.id === ui.agentId));
+  if (!lockAgent) {
+    const agentSel = wrap.querySelector('#fAgent');
+    state.agents.forEach((a) => addOption(agentSel, a.id, a.name, a.id === ui.agentId));
+    agentSel.addEventListener('change', (e) => { ui.agentId = e.target.value; actions.rerender(); });
+  }
 
-  const outletSel = wrap.querySelector('#fOutlet');
-  state.outlets.forEach((o) => addOption(outletSel, o.id, o.name, o.id === ui.outletId));
+  if (!lockOutlet) {
+    const outletSel = wrap.querySelector('#fOutlet');
+    state.outlets.forEach((o) => addOption(outletSel, o.id, o.name, o.id === ui.outletId));
+    outletSel.addEventListener('change', (e) => { ui.outletId = e.target.value; actions.rerender(); });
+  }
 
   wrap.querySelector('#fType').value = ui.type;
 
   wrap.querySelector('#fYear').addEventListener('change', (e) => { ui.year = e.target.value === 'ALL' ? 'ALL' : Number(e.target.value); actions.rerender(); });
   wrap.querySelector('#fMonth').addEventListener('change', (e) => { ui.month = e.target.value === 'ALL' ? 'ALL' : Number(e.target.value); actions.rerender(); });
   wrap.querySelector('#fType').addEventListener('change', (e) => { ui.type = e.target.value; actions.rerender(); });
-  wrap.querySelector('#fAgent').addEventListener('change', (e) => { ui.agentId = e.target.value; actions.rerender(); });
-  wrap.querySelector('#fOutlet').addEventListener('change', (e) => { ui.outletId = e.target.value; actions.rerender(); });
   wrap.querySelector('#fSearch').addEventListener('input', (e) => { ui.search = e.target.value; refreshHistorique(wrap, state, actions); });
 
   refreshHistorique(wrap, state, actions);
@@ -238,11 +256,16 @@ function renderSubsTable(host, subs, state, actions, { emptyText }) {
 
 function openSubForm(state, actions, rec) {
   const isEdit = !!rec;
+  const { role, agentId: scopeAgentId, outletId: scopeOutletId } = actions.scope;
   const agentOptions = state.agents.map((a) => `<option value="${a.id}" ${rec && rec.agentId === a.id ? 'selected' : ''}>${escapeHtml(a.name)}</option>`).join('');
   const outletOptions = state.outlets.map((o) => `<option value="${o.id}" ${rec && rec.outletId === o.id ? 'selected' : ''}>${escapeHtml(o.name)}</option>`).join('');
+  const lockedAgent = role === 'vendeur' ? state.agents.find((a) => a.id === scopeAgentId) : null;
+  const lockedOutlet = role === 'outlet' ? state.outlets.find((o) => o.id === scopeOutletId) : null;
 
   const v = rec || {
-    dateCreation: todayISO(), agentId: state.agents[0]?.id || '', outletId: state.outlets[0]?.id || '',
+    dateCreation: todayISO(),
+    agentId: lockedAgent ? lockedAgent.id : (state.agents[0]?.id || ''),
+    outletId: lockedOutlet ? lockedOutlet.id : (state.outlets[0]?.id || ''),
     loginSaisie: '', loginPaiement: '', dateDepotAvantages: todayISO(), type: 'TDD',
     numeroClient: '', numeroFixe: '', infoClient: '', referenceFacture: '', coutFactureInitiale: '', modePaiement: '',
   };
@@ -261,10 +284,10 @@ function openSubForm(state, actions, rec) {
           </select>
         </label>
         <label class="field">Vendeur
-          <select name="agentId"><option value="">—</option>${agentOptions}</select>
+          ${selectOrLocked('agentId', agentOptions, lockedAgent?.id, lockedAgent?.name)}
         </label>
         <label class="field">Point de vente
-          <select name="outletId"><option value="">—</option>${outletOptions}</select>
+          ${selectOrLocked('outletId', outletOptions, lockedOutlet?.id, lockedOutlet?.name)}
         </label>
         <label class="field full">Nom du client
           <input type="text" name="infoClient" value="${escapeHtml(v.infoClient)}" placeholder="NOM, Prénoms" required>
