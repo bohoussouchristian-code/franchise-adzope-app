@@ -73,6 +73,7 @@ function renderAdmins(wrap, actions) {
         <div class="admin-row-id muted small">${escapeHtml(a.identifier)}</div>
       </div>
       <button class="btn btn-sm" data-edit="${a.id}">Modifier</button>
+      <button class="btn btn-sm" data-reset="${a.id}">Réinitialiser le mot de passe</button>
       <button class="btn btn-sm btn-danger" data-remove="${a.id}" ${isSelfOrLast(a, admins, current) ? `disabled title="${admins.length <= 1 ? 'Impossible de supprimer le dernier administrateur' : 'Vous ne pouvez pas supprimer votre propre compte pendant que vous êtes connecté'}"` : ''}>Retirer</button>
     `;
     list.appendChild(row);
@@ -88,6 +89,7 @@ function renderAdmins(wrap, actions) {
 
   list.addEventListener('click', (e) => {
     const editId = e.target.dataset.edit;
+    const resetId = e.target.dataset.reset;
     const removeId = e.target.dataset.remove;
     if (editId) {
       const admin = admins.find((a) => a.id === editId);
@@ -96,6 +98,14 @@ function renderAdmins(wrap, actions) {
         existing: admin,
         onUpdate: (data) => updateAdmin(admin.id, data),
         onDone: () => { renderAdmins(wrap, actions); },
+      });
+    } else if (resetId) {
+      const admin = admins.find((a) => a.id === resetId);
+      openResetPasswordConfirm({
+        name: admin.name,
+        identifier: admin.identifier,
+        onReset: (password) => updateAdmin(admin.id, { password }),
+        onDone: () => renderAdmins(wrap, actions),
       });
     } else if (removeId) {
       if (confirm('Retirer cet administrateur ? Il ne pourra plus se connecter à l’application.')) {
@@ -130,6 +140,7 @@ function renderAgents(wrap, state, actions) {
           ? `<span class="pill neutral">${escapeHtml(account.identifier)}</span>
              <button class="btn btn-sm" data-permissions="${account.id}" data-permissions-name="${escapeHtml(a.name)}">Permissions</button>
              <button class="btn btn-sm" data-edit-access="${account.id}">Modifier l'accès</button>
+             <button class="btn btn-sm" data-reset-access="${account.id}">Réinitialiser le mot de passe</button>
              <button class="btn btn-sm btn-danger" data-remove-access="${account.id}">Retirer l'accès</button>`
           : `<button class="btn btn-sm btn-primary" data-create-access="${a.id}">+ Créer un accès</button>`}
       </div>
@@ -149,11 +160,20 @@ function renderAgents(wrap, state, actions) {
     const removeAgentId = e.target.dataset.removeAgent;
     const createAccessId = e.target.dataset.createAccess;
     const editAccessId = e.target.dataset.editAccess;
+    const resetAccessId = e.target.dataset.resetAccess;
     const removeAccessId = e.target.dataset.removeAccess;
     const permissionsId = e.target.dataset.permissions;
 
     if (permissionsId) {
       openPermissionsPanel(permissionsId, e.target.dataset.permissionsName);
+    } else if (resetAccessId) {
+      const account = listVendeurAccounts().find((a) => a.id === resetAccessId);
+      openResetPasswordConfirm({
+        name: account.name,
+        identifier: account.identifier,
+        onReset: (password) => updateVendeurAccount(account.id, { password }),
+        onDone: () => renderAgents(wrap, state, actions),
+      });
     } else if (removeAgentId) {
       if (confirm('Retirer ce vendeur ? Ses abonnements seront conservés mais désaffectés, et son accès sera supprimé.')) {
         const account = getVendeurAccountByAgent(removeAgentId);
@@ -210,6 +230,7 @@ function renderOutletsList(wrap, state, actions) {
           ? `<span class="pill neutral">${escapeHtml(account.identifier)}</span>
              <button class="btn btn-sm" data-permissions="${account.id}" data-permissions-name="${escapeHtml(o.name)}">Permissions</button>
              <button class="btn btn-sm" data-edit-access="${account.id}">Modifier l'accès</button>
+             <button class="btn btn-sm" data-reset-access="${account.id}">Réinitialiser le mot de passe</button>
              <button class="btn btn-sm btn-danger" data-remove-access="${account.id}">Retirer l'accès</button>`
           : `<button class="btn btn-sm btn-primary" data-create-access="${o.id}">+ Créer un accès</button>`}
       </div>
@@ -229,11 +250,20 @@ function renderOutletsList(wrap, state, actions) {
     const removeOutletId = e.target.dataset.removeOutlet;
     const createAccessId = e.target.dataset.createAccess;
     const editAccessId = e.target.dataset.editAccess;
+    const resetAccessId = e.target.dataset.resetAccess;
     const removeAccessId = e.target.dataset.removeAccess;
     const permissionsId = e.target.dataset.permissions;
 
     if (permissionsId) {
       openPermissionsPanel(permissionsId, e.target.dataset.permissionsName);
+    } else if (resetAccessId) {
+      const account = listPointDeVenteAccounts().find((a) => a.id === resetAccessId);
+      openResetPasswordConfirm({
+        name: account.name,
+        identifier: account.identifier,
+        onReset: (password) => updatePointDeVenteAccount(account.id, { password }),
+        onDone: () => renderOutletsList(wrap, state, actions),
+      });
     } else if (removeOutletId) {
       if (confirm('Retirer ce point de vente ? Son accès sera également supprimé.')) {
         const account = getPointDeVenteAccountByOutlet(removeOutletId);
@@ -333,6 +363,53 @@ function openPermissionsPanel(accountId, entityName) {
       });
       setAccountPermissions(accountId, next);
       closeModal();
+    });
+  });
+}
+
+// ---------- Réinitialisation de mot de passe (admin / vendeur / point de vente) ----------
+// Génère un nouveau mot de passe temporaire et l'envoie par e-mail (repli : affiché si l'envoi échoue).
+
+function openResetPasswordConfirm({ name, identifier, onReset, onDone }) {
+  openModal(`
+    <h2>Réinitialiser le mot de passe</h2>
+    <p class="small muted" style="margin-top:-8px">Un nouveau mot de passe temporaire sera généré pour ${escapeHtml(name)} et envoyé à ${escapeHtml(identifier)}.</p>
+    <div id="resetStatus" class="small" hidden></div>
+    <div id="resetError" class="login-error" hidden></div>
+    <div class="modal-actions">
+      <button type="button" class="btn" id="btnCancel">Annuler</button>
+      <button type="button" class="btn btn-primary" id="btnConfirmReset">Réinitialiser et envoyer</button>
+    </div>
+  `, (modalEl) => {
+    modalEl.querySelector('#btnCancel').addEventListener('click', closeModal);
+    const errorBox = modalEl.querySelector('#resetError');
+    const statusBox = modalEl.querySelector('#resetStatus');
+    const btn = modalEl.querySelector('#btnConfirmReset');
+    const showError = (msg) => { errorBox.textContent = msg; errorBox.hidden = false; };
+    const showStatus = (msg) => { statusBox.textContent = msg; statusBox.hidden = false; };
+
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      errorBox.hidden = true;
+      const password = generateTempPassword();
+      try {
+        await onReset(password);
+        showStatus('Mot de passe réinitialisé. Envoi de l’e-mail en cours...');
+
+        const result = await sendInviteEmail({ to: identifier, name, password, appName: 'OSB GESTION PRO' });
+
+        if (result.ok) {
+          showStatus(`Mot de passe réinitialisé et envoyé à ${identifier}.`);
+        } else {
+          errorBox.hidden = false;
+          errorBox.innerHTML = `Mot de passe réinitialisé, mais l'envoi de l'e-mail a échoué (${escapeHtml(result.error)}).<br>Communiquez ce nouveau mot de passe vous-même : <b>${escapeHtml(password)}</b>`;
+          statusBox.hidden = true;
+        }
+        setTimeout(() => { closeModal(); onDone(); }, result.ok ? 1200 : 6000);
+      } catch (err) {
+        btn.disabled = false;
+        showError(err.message);
+      }
     });
   });
 }
