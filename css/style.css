@@ -69,6 +69,8 @@ body {
   display: flex;
   flex-direction: column;
   gap: 3px;
+  flex: 1;
+  min-height: 0;
 }
 
 .side-link {
@@ -148,6 +150,12 @@ body {
 
 .side-sublink { font-size: 12.5px; padding: 8px 10px; }
 .side-sublink .side-icon { width: 15px; height: 15px; }
+
+.side-bottom {
+  margin-top: auto;
+  border-top: 1px solid rgba(255,255,255,.1);
+  padding-top: 12px;
+}
 
 .main-col {
   flex: 1;
@@ -487,6 +495,9 @@ tr.total-row td { font-weight: 700; background: #fafbfd; }
 
 .list-manage-row input { flex: 1; border: none; background: transparent; font-size: 14px; }
 .list-manage-row input:focus { outline: none; }
+
+.admin-row-info { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.admin-row-name { font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 8px; }
 
 .import-drop {
   border: 2px dashed var(--border);

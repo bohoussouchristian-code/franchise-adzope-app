@@ -1,7 +1,7 @@
-import { hasAccount, setCredentials, verifyCredentials, openSession } from './auth.js';
+import { hasAccount, createFirstAdmin, verifyCredentials, openSession } from './auth.js';
 
-// Affiche l'écran de connexion (ou de création du compte au premier
-// lancement) et appelle onSuccess() une fois l'accès autorisé.
+// Affiche l'écran de connexion (ou de création du premier compte admin au
+// premier lancement) et appelle onSuccess() une fois l'accès autorisé.
 export function renderLogin(root, onSuccess) {
   const isSetup = !hasAccount();
 
@@ -10,13 +10,18 @@ export function renderLogin(root, onSuccess) {
   wrap.innerHTML = `
     <div class="login-card">
       <img src="assets/logo.jpg" alt="OmnySyncBase" class="login-logo">
-      <h1 class="login-title">${isSetup ? 'Créer votre accès' : 'Connexion'}</h1>
+      <h1 class="login-title">${isSetup ? 'Créer votre accès administrateur' : 'Connexion'}</h1>
       <p class="login-sub">
         ${isSetup
-          ? 'Première utilisation : choisissez un identifiant (e-mail ou téléphone) et un mot de passe pour protéger l’accès à cette application.'
+          ? 'Première utilisation : créez le premier compte administrateur pour protéger l’accès à cette application. D’autres administrateurs pourront être ajoutés ensuite depuis Paramètres.'
           : 'Entrez votre e-mail (ou téléphone) et votre mot de passe pour accéder au suivi commercial.'}
       </p>
       <form id="loginForm" class="login-form">
+        ${isSetup ? `
+          <label class="field">Nom complet
+            <input type="text" id="name" autocomplete="name" placeholder="ex. Christian Bohoussou" required>
+          </label>
+        ` : ''}
         <label class="field">E-mail ou téléphone
           <input type="text" id="identifier" autocomplete="username" placeholder="ex. christian@email.com ou 07 00 00 00 00" required>
         </label>
@@ -51,18 +56,20 @@ export function renderLogin(root, onSuccess) {
     const pw1 = wrap.querySelector('#pw1').value;
 
     if (isSetup) {
+      const name = wrap.querySelector('#name').value.trim();
       const pw2 = wrap.querySelector('#pw2').value;
+      if (name.length < 2) { showError('Indiquez votre nom.'); return; }
       if (identifier.length < 3) { showError('Indiquez un e-mail ou un numéro de téléphone valide.'); return; }
       if (pw1.length < 4) { showError('Le mot de passe doit contenir au moins 4 caractères.'); return; }
       if (pw1 !== pw2) { showError('Les deux mots de passe ne correspondent pas.'); return; }
-      await setCredentials(identifier, pw1);
-      openSession(true);
+      const admin = await createFirstAdmin(name, identifier, pw1);
+      openSession(admin.id, true);
       onSuccess();
     } else {
-      const ok = await verifyCredentials(identifier, pw1);
-      if (!ok) { showError('Identifiant ou mot de passe incorrect.'); return; }
+      const adminId = await verifyCredentials(identifier, pw1);
+      if (!adminId) { showError('Identifiant ou mot de passe incorrect.'); return; }
       const remember = wrap.querySelector('#remember').checked;
-      openSession(remember);
+      openSession(adminId, remember);
       onSuccess();
     }
   });

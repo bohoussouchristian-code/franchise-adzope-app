@@ -6,8 +6,9 @@ import { renderEvaluations, renderOutlets } from './ui-notation.js';
 import { renderAbonnements } from './ui-abonnements.js';
 import { renderEquipeVendeurs, renderEquipePointsDeVente } from './ui-equipe.js';
 import { renderExport } from './ui-export.js';
+import { renderParametres } from './ui-parametres.js';
 import { renderLogin } from './ui-login.js';
-import { isSessionActive, closeSession, getIdentifier } from './auth.js';
+import { isSessionActive, closeSession, getCurrentAdmin } from './auth.js';
 
 const loginRoot = document.getElementById('loginRoot');
 const appRoot = document.getElementById('appRoot');
@@ -17,6 +18,7 @@ const tabsEl = document.getElementById('tabs');
 const logoutBtn = document.getElementById('btnLogout');
 const userAvatar = document.getElementById('userAvatar');
 const userName = document.getElementById('userName');
+const userRole = document.getElementById('userRole');
 
 let state = loadState();
 let currentTab = 'dashboard';
@@ -32,6 +34,7 @@ const pages = {
   'equipe-vendeurs': renderEquipeVendeurs,
   'equipe-points': renderEquipePointsDeVente,
   export: renderExport,
+  parametres: renderParametres,
 };
 
 function showLogin() {
@@ -45,9 +48,6 @@ function startApp() {
   loginRoot.hidden = true;
   loginRoot.innerHTML = '';
   appRoot.hidden = false;
-  const identifier = getIdentifier() || 'Administrateur';
-  userAvatar.textContent = identifier.trim().charAt(0).toUpperCase();
-  userName.textContent = identifier;
   rerender();
 }
 
@@ -59,6 +59,12 @@ function commit(mutator) {
 
 function rerender() {
   brandTitle.textContent = (state.meta.franchiseName || 'FRANCHISE').toUpperCase();
+  const admin = getCurrentAdmin();
+  if (admin) {
+    userAvatar.textContent = admin.name.trim().charAt(0).toUpperCase();
+    userName.textContent = admin.name;
+    userRole.textContent = admin.identifier;
+  }
   view.innerHTML = '';
   pages[currentTab](view, state, { commit, rerender, goTo });
 }
