@@ -171,6 +171,8 @@ function renderAgents(wrap, state, actions) {
       openResetPasswordConfirm({
         name: account.name,
         identifier: account.identifier,
+        kind: 'phone',
+        contactEmail: account.contactEmail,
         onReset: (password) => updateVendeurAccount(account.id, { password }),
         onDone: () => renderAgents(wrap, state, actions),
       });
@@ -185,13 +187,15 @@ function renderAgents(wrap, state, actions) {
       const agent = state.agents.find((a) => a.id === createAccessId);
       openAccountForm({
         title: `Créer l'accès de ${agent.name}`,
-        onCreate: (name, identifier, password) => addVendeurAccount(name, identifier, password, createAccessId, defaultPermissionsFor('vendeur')),
+        kind: 'phone',
+        onCreate: (name, identifier, password, contactEmail) => addVendeurAccount(name, identifier, password, createAccessId, defaultPermissionsFor('vendeur'), contactEmail),
         onDone: () => renderAgents(wrap, state, actions),
       });
     } else if (editAccessId) {
       const account = listVendeurAccounts().find((a) => a.id === editAccessId);
       openAccountForm({
         title: 'Modifier l’accès du vendeur',
+        kind: 'phone',
         existing: account,
         onUpdate: (data) => updateVendeurAccount(account.id, data),
         onDone: () => renderAgents(wrap, state, actions),
@@ -261,6 +265,8 @@ function renderOutletsList(wrap, state, actions) {
       openResetPasswordConfirm({
         name: account.name,
         identifier: account.identifier,
+        kind: 'phone',
+        contactEmail: account.contactEmail,
         onReset: (password) => updatePointDeVenteAccount(account.id, { password }),
         onDone: () => renderOutletsList(wrap, state, actions),
       });
@@ -275,13 +281,15 @@ function renderOutletsList(wrap, state, actions) {
       const outlet = state.outlets.find((o) => o.id === createAccessId);
       openAccountForm({
         title: `Créer l'accès de ${outlet.name}`,
-        onCreate: (name, identifier, password) => addPointDeVenteAccount(name, identifier, password, createAccessId, defaultPermissionsFor('outlet')),
+        kind: 'phone',
+        onCreate: (name, identifier, password, contactEmail) => addPointDeVenteAccount(name, identifier, password, createAccessId, defaultPermissionsFor('outlet'), contactEmail),
         onDone: () => renderOutletsList(wrap, state, actions),
       });
     } else if (editAccessId) {
       const account = listPointDeVenteAccounts().find((a) => a.id === editAccessId);
       openAccountForm({
         title: 'Modifier l’accès du point de vente',
+        kind: 'phone',
         existing: account,
         onUpdate: (data) => updatePointDeVenteAccount(account.id, data),
         onDone: () => renderOutletsList(wrap, state, actions),
@@ -367,13 +375,20 @@ function openPermissionsPanel(accountId, entityName) {
   });
 }
 
-// ---------- Réinitialisation de mot de passe (admin / vendeur / point de vente) ----------
-// Génère un nouveau mot de passe temporaire et l'envoie par e-mail (repli : affiché si l'envoi échoue).
+// ---------- Réinitialisation de mot de passe / code (admin / vendeur / point de vente) ----------
+// Génère un nouveau mot de passe (ou code) temporaire et l'envoie par e-mail
+// (repli : affiché si l'envoi échoue). Pour les comptes Vendeur/Point de vente
+// (kind: 'phone'), l'identifiant de connexion est le téléphone, donc l'e-mail
+// de contact (contactEmail) sert uniquement à recevoir le code.
 
-function openResetPasswordConfirm({ name, identifier, onReset, onDone }) {
+function openResetPasswordConfirm({ name, identifier, kind = 'admin', contactEmail, onReset, onDone }) {
+  const isPhone = kind === 'phone';
+  const label = isPhone ? 'code' : 'mot de passe';
+  const sendTo = isPhone ? contactEmail : identifier;
+
   openModal(`
-    <h2>Réinitialiser le mot de passe</h2>
-    <p class="small muted" style="margin-top:-8px">Un nouveau mot de passe temporaire sera généré pour ${escapeHtml(name)} et envoyé à ${escapeHtml(identifier)}.</p>
+    <h2>Réinitialiser le ${label}</h2>
+    <p class="small muted" style="margin-top:-8px">Un nouveau ${label} temporaire sera généré pour ${escapeHtml(name)} et envoyé à ${escapeHtml(sendTo || '')}.</p>
     <div id="resetStatus" class="small" hidden></div>
     <div id="resetError" class="login-error" hidden></div>
     <div class="modal-actions">
@@ -394,15 +409,15 @@ function openResetPasswordConfirm({ name, identifier, onReset, onDone }) {
       const password = generateTempPassword();
       try {
         await onReset(password);
-        showStatus('Mot de passe réinitialisé. Envoi de l’e-mail en cours...');
+        showStatus(`${isPhone ? 'Code' : 'Mot de passe'} réinitialisé. Envoi de l’e-mail en cours...`);
 
-        const result = await sendInviteEmail({ to: identifier, name, password, appName: 'OSB GESTION PRO' });
+        const result = await sendInviteEmail({ to: sendTo, name, password, appName: 'OSB GESTION PRO', codeLabel: label, loginIdentifier: identifier });
 
         if (result.ok) {
-          showStatus(`Mot de passe réinitialisé et envoyé à ${identifier}.`);
+          showStatus(`${isPhone ? 'Code' : 'Mot de passe'} réinitialisé et envoyé à ${sendTo}.`);
         } else {
           errorBox.hidden = false;
-          errorBox.innerHTML = `Mot de passe réinitialisé, mais l'envoi de l'e-mail a échoué (${escapeHtml(result.error)}).<br>Communiquez ce nouveau mot de passe vous-même : <b>${escapeHtml(password)}</b>`;
+          errorBox.innerHTML = `${isPhone ? 'Code' : 'Mot de passe'} réinitialisé, mais l'envoi de l'e-mail a échoué (${escapeHtml(result.error)}).<br>Communiquez ce nouveau ${label} vous-même : <b>${escapeHtml(password)}</b>`;
           statusBox.hidden = true;
         }
         setTimeout(() => { closeModal(); onDone(); }, result.ok ? 1200 : 6000);
@@ -415,31 +430,44 @@ function openResetPasswordConfirm({ name, identifier, onReset, onDone }) {
 }
 
 // ---------- Formulaire générique de compte (admin / vendeur / point de vente) ----------
-// - Création : mot de passe temporaire généré et envoyé par e-mail (repli : affiché si l'envoi échoue).
-// - Modification : mots de passe laissés vides = inchangés.
+// - Création : mot de passe (ou code) temporaire généré et envoyé par e-mail (repli : affiché si l'envoi échoue).
+// - Modification : mots de passe/codes laissés vides = inchangés.
+// - kind 'admin' : identifiant = e-mail (sert aussi à recevoir le mot de passe).
+// - kind 'phone' (vendeur/point de vente) : identifiant = téléphone, avec un e-mail de contact séparé pour recevoir le code.
 
-function openAccountForm({ title, existing, onCreate, onUpdate, onDone }) {
+function openAccountForm({ title, kind = 'admin', existing, onCreate, onUpdate, onDone }) {
   const isEdit = !!existing;
+  const isPhone = kind === 'phone';
+  const label = isPhone ? 'code' : 'mot de passe';
 
   openModal(`
     <h2>${title}</h2>
-    ${!isEdit ? `<p class="small muted" style="margin-top:-8px">Un mot de passe temporaire est généré automatiquement et envoyé par e-mail à la personne.</p>` : ''}
+    ${!isEdit ? `<p class="small muted" style="margin-top:-8px">Un ${label} temporaire est généré automatiquement et envoyé par e-mail à la personne.</p>` : ''}
     <form id="accForm">
       <div class="form-grid">
         <label class="field full">Nom complet
           <input type="text" name="name" value="${isEdit ? escapeHtml(existing.name) : ''}" required>
         </label>
+        ${isPhone ? `
+        <label class="field">Numéro de téléphone
+          <input type="tel" name="identifier" value="${isEdit ? escapeHtml(existing.identifier) : ''}" placeholder="ex. 07 00 00 00 00" required>
+        </label>
+        <label class="field">E-mail (pour recevoir le code)
+          <input type="email" name="contactEmail" value="${isEdit ? escapeHtml(existing.contactEmail || '') : ''}" placeholder="ex. christian@email.com" required>
+        </label>
+        ` : `
         <label class="field full">E-mail
           <input type="email" name="identifier" value="${isEdit ? escapeHtml(existing.identifier) : ''}" placeholder="ex. christian@email.com" required>
         </label>
+        `}
         ${isEdit ? `
-          <label class="field">Nouveau mot de passe
+          <label class="field">Nouveau ${label}
             <input type="password" name="password" autocomplete="new-password" minlength="4">
           </label>
           <label class="field">Confirmer
             <input type="password" name="password2" autocomplete="new-password" minlength="4">
           </label>
-          <p class="small muted full">Laissez les mots de passe vides pour ne pas le changer.</p>
+          <p class="small muted full">Laissez les champs vides pour ne pas le changer.</p>
         ` : ''}
       </div>
       <div id="accFormStatus" class="small" hidden></div>
@@ -464,9 +492,19 @@ function openAccountForm({ title, existing, onCreate, onUpdate, onDone }) {
       const fd = new FormData(e.target);
       const name = fd.get('name').trim();
       const identifier = fd.get('identifier').trim();
+      const contactEmail = isPhone ? fd.get('contactEmail').trim() : undefined;
+      const sendTo = isPhone ? contactEmail : identifier;
 
-      if (!isEmail(identifier)) {
-        showError(isEdit ? 'Indiquez un e-mail valide.' : 'Indiquez un e-mail valide : le mot de passe lui sera envoyé à cette adresse.');
+      if (!identifier) {
+        showError(isPhone ? 'Indiquez un numéro de téléphone.' : 'Indiquez un e-mail valide.');
+        return;
+      }
+      if (!isPhone && !isEmail(identifier)) {
+        showError('Indiquez un e-mail valide : le mot de passe lui sera envoyé à cette adresse.');
+        return;
+      }
+      if (isPhone && !isEmail(contactEmail)) {
+        showError('Indiquez un e-mail de contact valide : le code y sera envoyé.');
         return;
       }
 
@@ -474,11 +512,11 @@ function openAccountForm({ title, existing, onCreate, onUpdate, onDone }) {
         const password = fd.get('password');
         const password2 = fd.get('password2');
         if (password || password2) {
-          if (password !== password2) { showError('Les deux mots de passe ne correspondent pas.'); return; }
-          if (password.length < 4) { showError('Le mot de passe doit contenir au moins 4 caractères.'); return; }
+          if (password !== password2) { showError('Les deux champs ne correspondent pas.'); return; }
+          if (password.length < 4) { showError(`Le ${label} doit contenir au moins 4 caractères.`); return; }
         }
         try {
-          await onUpdate({ name, identifier, password: password || undefined });
+          await onUpdate({ name, identifier, contactEmail, password: password || undefined });
           closeModal();
           onDone();
         } catch (err) {
@@ -489,17 +527,17 @@ function openAccountForm({ title, existing, onCreate, onUpdate, onDone }) {
 
       try {
         const password = generateTempPassword();
-        await onCreate(name, identifier, password);
+        await onCreate(name, identifier, password, contactEmail);
         submitBtn.disabled = true;
-        showStatus('Compte créé. Envoi de l’e-mail en cours...');
+        showStatus(`Compte créé. Envoi de l’e-mail en cours...`);
 
-        const result = await sendInviteEmail({ to: identifier, name, password, appName: 'OSB GESTION PRO' });
+        const result = await sendInviteEmail({ to: sendTo, name, password, appName: 'OSB GESTION PRO', codeLabel: label, loginIdentifier: identifier });
 
         if (result.ok) {
-          showStatus(`Compte créé et mot de passe envoyé à ${identifier}.`);
+          showStatus(`Compte créé et ${label} envoyé à ${sendTo}.`);
         } else {
           errorBox.hidden = false;
-          errorBox.innerHTML = `Compte créé, mais l'envoi de l'e-mail a échoué (${escapeHtml(result.error)}).<br>Communiquez ce mot de passe temporaire vous-même : <b>${escapeHtml(password)}</b>`;
+          errorBox.innerHTML = `Compte créé, mais l'envoi de l'e-mail a échoué (${escapeHtml(result.error)}).<br>Communiquez ce ${label} temporaire vous-même : <b>${escapeHtml(password)}</b>`;
           statusBox.hidden = true;
         }
         setTimeout(() => { closeModal(); onDone(); }, result.ok ? 1200 : 4000);

@@ -29,7 +29,7 @@ module.exports = async (req, res) => {
     return;
   }
 
-  const { to, name, password, appName } = req.body || {};
+  const { to, name, password, appName, loginIdentifier, codeLabel } = req.body || {};
   if (!to || !password) {
     res.status(400).json({ error: 'Champs manquants (destinataire ou mot de passe).' });
     return;
@@ -38,7 +38,10 @@ module.exports = async (req, res) => {
   const safeApp = escapeHtml(appName || 'OmnySyncBase');
   const safeName = escapeHtml(name || '');
   const safeTo = escapeHtml(to);
+  const safeIdentifier = escapeHtml(loginIdentifier || to);
   const safePassword = escapeHtml(password);
+  const isCode = codeLabel === 'code';
+  const safeLabel = isCode ? 'Code' : 'Mot de passe';
 
   try {
     const response = await fetch('https://api.brevo.com/v3/smtp/email', {
@@ -54,15 +57,15 @@ module.exports = async (req, res) => {
           email: process.env.BREVO_FROM_EMAIL,
         },
         to: [{ email: to, name: name || undefined }],
-        subject: `Votre accès administrateur — ${safeApp}`,
+        subject: `Vos identifiants de connexion — ${safeApp}`,
         htmlContent: `
           <p>Bonjour ${safeName},</p>
-          <p>Un compte administrateur vient d'être créé pour vous sur <b>${safeApp}</b>.</p>
+          <p>Un accès vient d'être créé (ou réinitialisé) pour vous sur <b>${safeApp}</b>.</p>
           <p>
-            Identifiant : <b>${safeTo}</b><br>
-            Mot de passe temporaire : <b>${safePassword}</b>
+            Identifiant de connexion : <b>${safeIdentifier}</b><br>
+            ${safeLabel} temporaire : <b>${safePassword}</b>
           </p>
-          <p>Nous vous recommandons de changer ce mot de passe après votre première connexion (menu Paramètres).</p>
+          <p>Nous vous recommandons de changer ce ${isCode ? 'code' : 'mot de passe'} après votre première connexion.</p>
         `,
       }),
     });

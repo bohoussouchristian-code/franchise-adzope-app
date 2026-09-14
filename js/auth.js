@@ -20,8 +20,11 @@ function randomToken(bytes = 16) {
   return [...crypto.getRandomValues(new Uint8Array(bytes))].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+// Normalise l'identifiant de connexion (e-mail ou téléphone) pour la
+// comparaison : espaces/tirets/parenthèses ignorés (mise en forme courante
+// des numéros de téléphone), jamais présents dans un e-mail valide.
 function normalizeIdentifier(identifier) {
-  return String(identifier || '').trim().toLowerCase();
+  return String(identifier || '').trim().toLowerCase().replace(/[\s()-]/g, '');
 }
 
 function loadAccounts() {
@@ -86,19 +89,19 @@ export function removeAdmin(id) {
 // ---------- Comptes Vendeurs (liés à un agent) ----------
 
 export function listVendeurAccounts() {
-  return accountsByRole('vendeur').map(({ id, name, identifier, linkId }) => ({ id, name, identifier, agentId: linkId }));
+  return accountsByRole('vendeur').map(({ id, name, identifier, linkId, contactEmail }) => ({ id, name, identifier, agentId: linkId, contactEmail }));
 }
 
 export function getVendeurAccountByAgent(agentId) {
   return listVendeurAccounts().find((a) => a.agentId === agentId) || null;
 }
 
-export async function addVendeurAccount(name, identifier, password, agentId, permissions) {
-  return addAccount('vendeur', agentId, name, identifier, password, permissions);
+export async function addVendeurAccount(name, identifier, password, agentId, permissions, contactEmail) {
+  return addAccount('vendeur', agentId, name, identifier, password, permissions, contactEmail);
 }
 
-export async function updateVendeurAccount(id, { name, identifier, password }) {
-  return updateAccount(id, { name, identifier, password });
+export async function updateVendeurAccount(id, { name, identifier, password, contactEmail }) {
+  return updateAccount(id, { name, identifier, password, contactEmail });
 }
 
 export function removeVendeurAccount(id) {
@@ -108,19 +111,19 @@ export function removeVendeurAccount(id) {
 // ---------- Comptes Points de vente (liés à un outlet) ----------
 
 export function listPointDeVenteAccounts() {
-  return accountsByRole('outlet').map(({ id, name, identifier, linkId }) => ({ id, name, identifier, outletId: linkId }));
+  return accountsByRole('outlet').map(({ id, name, identifier, linkId, contactEmail }) => ({ id, name, identifier, outletId: linkId, contactEmail }));
 }
 
 export function getPointDeVenteAccountByOutlet(outletId) {
   return listPointDeVenteAccounts().find((a) => a.outletId === outletId) || null;
 }
 
-export async function addPointDeVenteAccount(name, identifier, password, outletId, permissions) {
-  return addAccount('outlet', outletId, name, identifier, password, permissions);
+export async function addPointDeVenteAccount(name, identifier, password, outletId, permissions, contactEmail) {
+  return addAccount('outlet', outletId, name, identifier, password, permissions, contactEmail);
 }
 
-export async function updatePointDeVenteAccount(id, { name, identifier, password }) {
-  return updateAccount(id, { name, identifier, password });
+export async function updatePointDeVenteAccount(id, { name, identifier, password, contactEmail }) {
+  return updateAccount(id, { name, identifier, password, contactEmail });
 }
 
 export function removePointDeVenteAccount(id) {
@@ -129,14 +132,18 @@ export function removePointDeVenteAccount(id) {
 
 // ---------- Génériques (partagées par les 3 rôles) ----------
 
-async function addAccount(role, linkId, name, identifier, password, permissions) {
+async function addAccount(role, linkId, name, identifier, password, permissions, contactEmail) {
   const accounts = loadAccounts();
   if (accounts.some((a) => normalizeIdentifier(a.identifier) === normalizeIdentifier(identifier))) {
     throw new Error('Cet identifiant est déjà utilisé par un autre compte.');
   }
   const salt = randomToken();
   const hash = await sha256Hex(salt + password);
-  const account = { id: `${role}_${randomToken(8)}`, role, linkId, name: name.trim(), identifier: identifier.trim(), salt, hash, permissions: permissions || {} };
+  const account = {
+    id: `${role}_${randomToken(8)}`, role, linkId, name: name.trim(), identifier: identifier.trim(),
+    contactEmail: contactEmail ? contactEmail.trim() : undefined,
+    salt, hash, permissions: permissions || {},
+  };
   accounts.push(account);
   saveAccounts(accounts);
   return account;
@@ -157,7 +164,7 @@ export function setAccountPermissions(id, permissions) {
   saveAccounts(accounts);
 }
 
-async function updateAccount(id, { name, identifier, password }) {
+async function updateAccount(id, { name, identifier, password, contactEmail }) {
   const accounts = loadAccounts();
   const account = accounts.find((a) => a.id === id);
   if (!account) return;
@@ -166,6 +173,7 @@ async function updateAccount(id, { name, identifier, password }) {
   }
   if (name !== undefined) account.name = name.trim();
   if (identifier !== undefined) account.identifier = identifier.trim();
+  if (contactEmail !== undefined) account.contactEmail = contactEmail.trim();
   if (password) {
     account.salt = randomToken();
     account.hash = await sha256Hex(account.salt + password);
