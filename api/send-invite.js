@@ -1,9 +1,10 @@
 // Fonction serverless Vercel : envoie par e-mail le mot de passe d'un
-// nouvel administrateur via l'API Brevo (ex-Sendinblue). Nécessite la
-// variable d'environnement BREVO_API_KEY dans les paramètres du projet
-// Vercel (Settings > Environment Variables), sinon renvoie une erreur
-// claire. BREVO_FROM_EMAIL doit être une adresse expéditrice vérifiée
-// dans le compte Brevo (Settings > Senders), sinon l'envoi est refusé.
+// nouvel administrateur via l'API Resend. Nécessite la variable
+// d'environnement RESEND_API_KEY dans les paramètres du projet Vercel
+// (Settings > Environment Variables), sinon renvoie une erreur claire.
+// Aucun domaine à vérifier : par défaut on envoie depuis l'adresse de
+// test onboarding@resend.dev fournie par Resend (modifiable via
+// RESEND_FROM une fois un domaine personnel vérifié, si souhaité).
 
 function escapeHtml(str) {
   return String(str || '')
@@ -19,13 +20,9 @@ module.exports = async (req, res) => {
     return;
   }
 
-  const apiKey = process.env.BREVO_API_KEY;
+  const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
-    res.status(500).json({ error: "BREVO_API_KEY n'est pas configurée sur le serveur." });
-    return;
-  }
-  if (!process.env.BREVO_FROM_EMAIL) {
-    res.status(500).json({ error: "BREVO_FROM_EMAIL n'est pas configurée (adresse expéditrice vérifiée dans Brevo)." });
+    res.status(500).json({ error: "RESEND_API_KEY n'est pas configurée sur le serveur." });
     return;
   }
 
@@ -41,21 +38,17 @@ module.exports = async (req, res) => {
   const safePassword = escapeHtml(password);
 
   try {
-    const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+    const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
-        'api-key': apiKey,
+        Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
-        Accept: 'application/json',
       },
       body: JSON.stringify({
-        sender: {
-          name: process.env.BREVO_FROM_NAME || safeApp,
-          email: process.env.BREVO_FROM_EMAIL,
-        },
-        to: [{ email: to, name: name || undefined }],
+        from: process.env.RESEND_FROM || 'OmnySyncBase <onboarding@resend.dev>',
+        to,
         subject: `Votre accès administrateur — ${safeApp}`,
-        htmlContent: `
+        html: `
           <p>Bonjour ${safeName},</p>
           <p>Un compte administrateur vient d'être créé pour vous sur <b>${safeApp}</b>.</p>
           <p>
