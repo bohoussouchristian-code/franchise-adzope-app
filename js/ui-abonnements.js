@@ -11,85 +11,32 @@ let ui = {
   search: '',
 };
 
-// ---------- Page : Nouvelle abonnement ----------
+// ---------- Page : Nouvel abonnement ----------
 
 export function renderNouvelAbonnement(root, state, actions) {
-  const agentOptions = state.agents.map((a) => `<option value="${a.id}">${escapeHtml(a.name)}</option>`).join('');
-  const outletOptions = state.outlets.map((o) => `<option value="${o.id}">${escapeHtml(o.name)}</option>`).join('');
-
   const wrap = document.createElement('div');
   wrap.innerHTML = `
-    <h1 class="page-title">Nouvel abonnement 4G Home</h1>
-    <p class="page-sub">Chaque abonnement enregistré ici alimente automatiquement les objectifs 4G Home et apparaît dans l'historique.</p>
-
-    <div class="card">
-      <form id="subForm">
-        <div class="form-grid">
-          <label class="field">Date de création
-            <input type="date" name="dateCreation" value="${todayISO()}" required>
-          </label>
-          <label class="field">Type d'abonnement
-            <select name="type">
-              <option value="TDD">TDD (Flybox)</option>
-              <option value="FDD">FDD (Easybox)</option>
-            </select>
-          </label>
-          <label class="field">Vendeur
-            <select name="agentId"><option value="">—</option>${agentOptions}</select>
-          </label>
-          <label class="field">Point de vente
-            <select name="outletId"><option value="">—</option>${outletOptions}</select>
-          </label>
-          <label class="field full">Nom du client
-            <input type="text" name="infoClient" placeholder="NOM, Prénoms" required>
-          </label>
-          <label class="field">N° client
-            <input type="text" name="numeroClient">
-          </label>
-          <label class="field">Numéro fixe (ND)
-            <input type="text" name="numeroFixe">
-          </label>
-          <label class="field">Référence facture
-            <input type="text" name="referenceFacture">
-          </label>
-          <label class="field">Coût facture initiale (F CFA)
-            <input type="number" min="0" name="coutFactureInitiale">
-          </label>
-          <label class="field">Login de saisie
-            <input type="text" name="loginSaisie">
-          </label>
-          <label class="field">Login paiement
-            <input type="text" name="loginPaiement">
-          </label>
-          <label class="field">Date dépôt des avantages
-            <input type="date" name="dateDepotAvantages" value="${todayISO()}">
-          </label>
-          <label class="field">Mode de paiement
-            <input type="text" name="modePaiement" placeholder="OM, Espèce, réf. mobile money...">
-          </label>
-        </div>
-        <div class="modal-actions">
-          <button type="submit" class="btn btn-primary" ${state.agents.length ? '' : 'disabled'}>Ajouter l'abonnement</button>
-        </div>
-      </form>
+    <div class="page-head-row">
+      <div>
+        <h1 class="page-title">Nouvel abonnement 4G Home</h1>
+        <p class="page-sub">Les abonnements ajoutés aujourd'hui apparaissent dans le tableau ci-dessous.</p>
+      </div>
+      <button class="btn btn-primary" id="btnAdd" ${state.agents.length ? '' : 'disabled'}>+ Nouvel abonnement</button>
     </div>
+    <div id="tableHost"></div>
   `;
   root.appendChild(wrap);
 
   if (!state.agents.length) {
-    const note = document.createElement('p');
-    note.className = 'small muted';
-    note.textContent = "Ajoutez d'abord un vendeur dans « Équipe & Points de vente » pour pouvoir enregistrer un abonnement.";
-    wrap.querySelector('#subForm').before(note);
+    wrap.querySelector('#tableHost').innerHTML = `<div class="empty-state">Ajoutez d'abord un vendeur dans « Équipe &amp; Points de vente » pour pouvoir enregistrer un abonnement.</div>`;
+    return;
   }
 
-  wrap.querySelector('#subForm').addEventListener('submit', (e) => {
-    e.preventDefault();
-    const fd = new FormData(e.target);
-    const data = Object.fromEntries(fd.entries());
-    actions.commit((s) => addSubscription(s, data));
-    actions.goTo('abonnements-historique');
-  });
+  wrap.querySelector('#btnAdd').addEventListener('click', () => openSubForm(state, actions, null));
+
+  const today = todayISO();
+  const subs = state.subscriptions4gHome.filter((s) => s.dateCreation === today);
+  renderSubsTable(wrap.querySelector('#tableHost'), subs, state, actions, { emptyText: "Aucun abonnement ajouté aujourd'hui pour l'instant. Cliquez sur « + Nouvel abonnement » pour en enregistrer un." });
 }
 
 // ---------- Page : Historique des abonnements ----------
@@ -155,9 +102,32 @@ export function renderHistoriqueAbonnements(root, state, actions) {
   wrap.querySelector('#fType').addEventListener('change', (e) => { ui.type = e.target.value; actions.rerender(); });
   wrap.querySelector('#fAgent').addEventListener('change', (e) => { ui.agentId = e.target.value; actions.rerender(); });
   wrap.querySelector('#fOutlet').addEventListener('change', (e) => { ui.outletId = e.target.value; actions.rerender(); });
-  wrap.querySelector('#fSearch').addEventListener('input', (e) => { ui.search = e.target.value; renderList(wrap, state, actions); });
+  wrap.querySelector('#fSearch').addEventListener('input', (e) => { ui.search = e.target.value; refreshHistorique(wrap, state, actions); });
 
-  renderList(wrap, state, actions);
+  refreshHistorique(wrap, state, actions);
+}
+
+function refreshHistorique(wrap, state, actions) {
+  const subs = filteredSubs(state);
+  const tdd = subs.filter((s) => s.type === 'TDD').length;
+  const fdd = subs.filter((s) => s.type === 'FDD').length;
+  const revenue = subs.reduce((sum, s) => sum + (s.coutFactureInitiale || 0), 0);
+
+  const recap = wrap.querySelector('#recap');
+  recap.innerHTML = '';
+  [
+    ['Résultats filtrés', fmtNum(subs.length)],
+    ['TDD (Flybox)', fmtNum(tdd)],
+    ['FDD (Easybox)', fmtNum(fdd)],
+    ['Facturation cumulée', fmtMoney(revenue)],
+  ].forEach(([label, value]) => {
+    const el = document.createElement('div');
+    el.className = 'stat-card';
+    el.innerHTML = `<div class="name">${label}</div><div class="nums"><b style="font-size:20px">${value}</b></div>`;
+    recap.appendChild(el);
+  });
+
+  renderSubsTable(wrap.querySelector('#tableHost'), subs, state, actions, { emptyText: 'Aucun abonnement pour ces filtres.' });
 }
 
 function addOption(select, value, label, selected) {
@@ -187,31 +157,13 @@ function filteredSubs(state) {
   }).sort((a, b) => (b.dateCreation || '').localeCompare(a.dateCreation || ''));
 }
 
-function renderList(wrap, state, actions) {
-  const subs = filteredSubs(state);
-  const tdd = subs.filter((s) => s.type === 'TDD').length;
-  const fdd = subs.filter((s) => s.type === 'FDD').length;
-  const revenue = subs.reduce((sum, s) => sum + (s.coutFactureInitiale || 0), 0);
+// ---------- Tableau partagé ----------
 
-  const recap = wrap.querySelector('#recap');
-  recap.innerHTML = '';
-  [
-    ['Résultats filtrés', fmtNum(subs.length)],
-    ['TDD (Flybox)', fmtNum(tdd)],
-    ['FDD (Easybox)', fmtNum(fdd)],
-    ['Facturation cumulée', fmtMoney(revenue)],
-  ].forEach(([label, value]) => {
-    const el = document.createElement('div');
-    el.className = 'stat-card';
-    el.innerHTML = `<div class="name">${label}</div><div class="nums"><b style="font-size:20px">${value}</b></div>`;
-    recap.appendChild(el);
-  });
-
-  const host = wrap.querySelector('#tableHost');
+function renderSubsTable(host, subs, state, actions, { emptyText }) {
   host.innerHTML = '';
 
   if (!subs.length) {
-    host.innerHTML = `<div class="empty-state">Aucun abonnement pour ces filtres.</div>`;
+    host.innerHTML = `<div class="empty-state">${emptyText}</div>`;
     return;
   }
 
@@ -266,7 +218,7 @@ function renderList(wrap, state, actions) {
     const delId = e.target.dataset.del;
     if (editId) {
       const rec = state.subscriptions4gHome.find((r) => r.id === editId);
-      openEditForm(state, actions, rec);
+      openSubForm(state, actions, rec);
     } else if (delId) {
       if (confirm('Supprimer cet abonnement ? Cette action est irréversible.')) {
         actions.commit((s) => removeSubscription(s, delId));
@@ -278,13 +230,21 @@ function renderList(wrap, state, actions) {
   host.appendChild(box);
 }
 
-function openEditForm(state, actions, rec) {
-  const agentOptions = state.agents.map((a) => `<option value="${a.id}" ${rec.agentId === a.id ? 'selected' : ''}>${escapeHtml(a.name)}</option>`).join('');
-  const outletOptions = state.outlets.map((o) => `<option value="${o.id}" ${rec.outletId === o.id ? 'selected' : ''}>${escapeHtml(o.name)}</option>`).join('');
-  const v = rec;
+// ---------- Formulaire "+ Nouvel abonnement" / Modifier ----------
+
+function openSubForm(state, actions, rec) {
+  const isEdit = !!rec;
+  const agentOptions = state.agents.map((a) => `<option value="${a.id}" ${rec && rec.agentId === a.id ? 'selected' : ''}>${escapeHtml(a.name)}</option>`).join('');
+  const outletOptions = state.outlets.map((o) => `<option value="${o.id}" ${rec && rec.outletId === o.id ? 'selected' : ''}>${escapeHtml(o.name)}</option>`).join('');
+
+  const v = rec || {
+    dateCreation: todayISO(), agentId: state.agents[0]?.id || '', outletId: state.outlets[0]?.id || '',
+    loginSaisie: '', loginPaiement: '', dateDepotAvantages: todayISO(), type: 'TDD',
+    numeroClient: '', numeroFixe: '', infoClient: '', referenceFacture: '', coutFactureInitiale: '', modePaiement: '',
+  };
 
   openModal(`
-    <h2>Modifier l'abonnement</h2>
+    <h2>${isEdit ? 'Modifier l’abonnement' : 'Nouvel abonnement 4G Home'}</h2>
     <form id="subForm">
       <div class="form-grid">
         <label class="field">Date de création
@@ -331,24 +291,30 @@ function openEditForm(state, actions, rec) {
         </label>
       </div>
       <div class="modal-actions">
-        <button type="button" class="btn btn-danger" id="btnDelete">Supprimer</button>
+        ${isEdit ? '<button type="button" class="btn btn-danger" id="btnDelete">Supprimer</button>' : ''}
         <button type="button" class="btn" id="btnCancel">Annuler</button>
-        <button type="submit" class="btn btn-primary">Enregistrer</button>
+        <button type="submit" class="btn btn-primary">${isEdit ? 'Enregistrer' : 'Ajouter'}</button>
       </div>
     </form>
   `, (modalEl) => {
     modalEl.querySelector('#btnCancel').addEventListener('click', closeModal);
-    modalEl.querySelector('#btnDelete').addEventListener('click', () => {
-      if (confirm('Supprimer cet abonnement ?')) {
-        actions.commit((s) => removeSubscription(s, rec.id));
-        closeModal();
-      }
-    });
+    if (isEdit) {
+      modalEl.querySelector('#btnDelete').addEventListener('click', () => {
+        if (confirm('Supprimer cet abonnement ?')) {
+          actions.commit((s) => removeSubscription(s, rec.id));
+          closeModal();
+        }
+      });
+    }
     modalEl.querySelector('#subForm').addEventListener('submit', (e) => {
       e.preventDefault();
       const fd = new FormData(e.target);
       const data = Object.fromEntries(fd.entries());
-      actions.commit((s) => updateSubscription(s, rec.id, data));
+      if (isEdit) {
+        actions.commit((s) => updateSubscription(s, rec.id, data));
+      } else {
+        actions.commit((s) => addSubscription(s, data));
+      }
       closeModal();
     });
   });
