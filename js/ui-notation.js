@@ -6,55 +6,40 @@ import {
 import { openModal, closeModal } from './modal.js';
 
 let ui = {
-  view: 'evaluation', // 'evaluation' | 'outlets'
   year: null,
   month: new Date().getMonth(),
   agentId: 'ALL',
   outletId: 'ALL',
 };
 
-export function renderNotation(root, state, actions) {
-  if (ui.year === null) ui.year = state.meta.year;
-
-  const wrap = document.createElement('div');
-  wrap.innerHTML = `
-    <p class="page-sub" style="margin-top:-4px">Fréquentation, client mystère et évaluation individuelle, séparés des objectifs commerciaux.</p>
-    <div class="subtabs">
-      <button class="subtab-btn ${ui.view === 'evaluation' ? 'active' : ''}" data-view="evaluation">Évaluation des vendeurs</button>
-      <button class="subtab-btn ${ui.view === 'outlets' ? 'active' : ''}" data-view="outlets">Fréquentation &amp; Client mystère</button>
-    </div>
-    <div id="notationHost"></div>
-  `;
-  root.appendChild(wrap);
-
-  wrap.querySelectorAll('.subtab-btn').forEach((b) => {
-    b.addEventListener('click', () => { ui.view = b.dataset.view; actions.rerender(); });
-  });
-
-  const host = wrap.querySelector('#notationHost');
-  if (ui.view === 'outlets') renderOutlets(host, state, actions);
-  else renderEvaluations(host, state, actions);
-}
-
 // ---------- Évaluation des vendeurs ----------
 
-function renderEvaluations(host, state, actions) {
+export function renderEvaluations(host, state, actions) {
+  if (ui.year === null) ui.year = state.meta.year;
+
   if (!state.agents.length) {
-    host.innerHTML = `<div class="empty-state">Ajoutez d'abord un vendeur dans l'onglet « Équipe &amp; Points de vente ».</div>`;
+    host.innerHTML = `
+      <h1 class="page-title">Évaluation des vendeurs</h1>
+      <div class="empty-state">Ajoutez d'abord un vendeur dans l'onglet « Équipe &amp; Points de vente ».</div>
+    `;
     return;
   }
 
   host.innerHTML = `
     <div class="page-head-row">
-      <div class="toolbar" style="margin-bottom:0">
-        <label class="field">Mois
-          <select id="fMonth"></select>
-        </label>
-        <label class="field">Vendeur
-          <select id="fAgent"><option value="ALL">Tous</option></select>
-        </label>
+      <div>
+        <h1 class="page-title">Évaluation des vendeurs</h1>
+        <p class="page-sub">Notation individuelle (assiduité, hiérarchie, dynamisme...), séparée des objectifs commerciaux.</p>
       </div>
       <button class="btn btn-primary" id="btnNewEval">+ Nouvelle évaluation</button>
+    </div>
+    <div class="toolbar">
+      <label class="field">Mois
+        <select id="fMonth"></select>
+      </label>
+      <label class="field">Vendeur
+        <select id="fAgent"><option value="ALL">Tous</option></select>
+      </label>
     </div>
     <div id="tableHost"></div>
   `;
@@ -211,23 +196,32 @@ function openEvaluationForm(state, actions, { agentId, monthIndex0 }) {
 
 // ---------- Fréquentation & Client mystère (par point de vente) ----------
 
-function renderOutlets(host, state, actions) {
+export function renderOutlets(host, state, actions) {
+  if (ui.year === null) ui.year = state.meta.year;
+
   if (!state.outlets.length) {
-    host.innerHTML = `<div class="empty-state">Ajoutez d'abord un point de vente dans l'onglet « Équipe &amp; Points de vente ».</div>`;
+    host.innerHTML = `
+      <h1 class="page-title">Fréquentation &amp; Client mystère</h1>
+      <div class="empty-state">Ajoutez d'abord un point de vente dans l'onglet « Équipe &amp; Points de vente ».</div>
+    `;
     return;
   }
 
   host.innerHTML = `
     <div class="page-head-row">
-      <div class="toolbar" style="margin-bottom:0">
-        <label class="field">Mois
-          <select id="fMonth"></select>
-        </label>
-        <label class="field">Point de vente
-          <select id="fOutlet"><option value="ALL">Tous</option></select>
-        </label>
+      <div>
+        <h1 class="page-title">Fréquentation &amp; Client mystère</h1>
+        <p class="page-sub">Affluence et expérience client mesurées par point de vente, saisie manuelle.</p>
       </div>
       <button class="btn btn-primary" id="btnNewOutlet">+ Nouvelle saisie</button>
+    </div>
+    <div class="toolbar">
+      <label class="field">Mois
+        <select id="fMonth"></select>
+      </label>
+      <label class="field">Point de vente
+        <select id="fOutlet"><option value="ALL">Tous</option></select>
+      </label>
     </div>
     <div id="tableHost"></div>
   `;

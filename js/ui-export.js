@@ -11,6 +11,20 @@ export function renderExport(root, state, actions) {
     <h1 class="page-title">Export / Sauvegarde</h1>
     <p class="page-sub">Toutes les données sont stockées dans ce navigateur. Exportez régulièrement une sauvegarde.</p>
 
+    <div class="section">
+      <h3 class="section-title">Informations franchise</h3>
+      <div class="card">
+        <div class="form-grid">
+          <label class="field">Nom de la franchise
+            <input type="text" id="franchiseName" value="${escapeHtml(state.meta.franchiseName)}">
+          </label>
+          <label class="field">Ville
+            <input type="text" id="franchiseCity" value="${escapeHtml(state.meta.city)}">
+          </label>
+        </div>
+      </div>
+    </div>
+
     <div class="two-col">
       <div class="section">
         <h3 class="section-title">Exporter</h3>
@@ -71,6 +85,12 @@ export function renderExport(root, state, actions) {
   `;
   root.appendChild(wrap);
 
+  wrap.querySelector('#franchiseName').addEventListener('change', (e) => {
+    actions.commit((s) => { s.meta.franchiseName = e.target.value.trim() || 'FRANCHISE'; });
+  });
+  wrap.querySelector('#franchiseCity').addEventListener('change', (e) => {
+    actions.commit((s) => { s.meta.city = e.target.value.trim(); });
+  });
   wrap.querySelector('#btnExportXlsx').addEventListener('click', () => exportXlsx(state));
   wrap.querySelector('#btnExportJson').addEventListener('click', () => exportJson(state));
   wrap.querySelector('#fileJson').addEventListener('change', (e) => importJson(e, actions));

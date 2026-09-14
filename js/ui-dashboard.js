@@ -18,9 +18,12 @@ const MODULES = [
     ],
   },
   {
-    code: 'OBJ', title: 'Objectifs', icon: 'target', tab: 'objectifs',
+    code: 'OBJ', title: 'Objectifs', icon: 'target', tab: 'objectifs-suivi',
     links: [
-      { label: 'Saisir les objectifs du mois', tab: 'objectifs' },
+      { label: 'Suivi du mois', tab: 'objectifs-suivi' },
+      { label: 'Historique des objectifs', tab: 'objectifs-historique' },
+      { label: 'Évaluation des vendeurs', tab: 'objectifs-evaluation' },
+      { label: 'Fréquentation & Client mystère', tab: 'objectifs-outlets' },
     ],
   },
   {
@@ -30,9 +33,10 @@ const MODULES = [
     ],
   },
   {
-    code: 'EQP', title: 'Équipe & Points de vente', icon: 'users', tab: 'equipe',
+    code: 'EQP', title: 'Équipe & Points de vente', icon: 'users', tab: 'equipe-vendeurs',
     links: [
-      { label: 'Gérer les vendeurs et points de vente', tab: 'equipe' },
+      { label: 'Vendeurs', tab: 'equipe-vendeurs' },
+      { label: 'Points de vente', tab: 'equipe-points' },
     ],
   },
   {

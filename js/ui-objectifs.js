@@ -1,10 +1,8 @@
 import { MONTH_NAMES_FR, monthKey, fmtNum, fmtPct, pctClass, escapeHtml } from './utils.js';
 import { getObjectiveEntry, upsertObjective, removeObjectiveEntry, listObjectiveRows } from './store.js';
 import { openModal, closeModal } from './modal.js';
-import { renderNotation } from './ui-notation.js';
 
 let ui = {
-  subTab: 'suivi', // 'suivi' | 'historique' | 'notation'
   year: null,
   month: new Date().getMonth(),
   agentId: 'ALL',
@@ -12,63 +10,20 @@ let ui = {
   histYear: 'ALL',
 };
 
-export function renderObjectifs(root, state, actions) {
+// ---------- Page : Suivi du mois ----------
+
+export function renderObjectifsSuivi(root, state, actions) {
   if (ui.year === null) ui.year = state.meta.year;
-  const showNewButton = ui.subTab !== 'notation';
 
   const wrap = document.createElement('div');
   wrap.innerHTML = `
     <div class="page-head-row">
       <div>
-        <h1 class="page-title">Objectifs</h1>
+        <h1 class="page-title">Objectifs — Suivi du mois</h1>
         <p class="page-sub">Fixez l'objectif d'un vendeur et suivez sa progression.</p>
       </div>
-      ${showNewButton ? '<button class="btn btn-primary" id="btnNewObjective">+ Nouvel objectif</button>' : ''}
+      <button class="btn btn-primary" id="btnNewObjective" ${state.agents.length ? '' : 'disabled'}>+ Nouvel objectif</button>
     </div>
-
-    <div class="subtabs">
-      <button class="subtab-btn ${ui.subTab === 'suivi' ? 'active' : ''}" data-subtab="suivi">Suivi du mois</button>
-      <button class="subtab-btn ${ui.subTab === 'historique' ? 'active' : ''}" data-subtab="historique">Historique des objectifs</button>
-      <button class="subtab-btn ${ui.subTab === 'notation' ? 'active' : ''}" data-subtab="notation">Notation</button>
-    </div>
-
-    <div id="subtabHost"></div>
-  `;
-  root.appendChild(wrap);
-
-  wrap.querySelectorAll('.subtab-btn').forEach((b) => {
-    b.addEventListener('click', () => { ui.subTab = b.dataset.subtab; actions.rerender(); });
-  });
-
-  const host = wrap.querySelector('#subtabHost');
-
-  if (ui.subTab === 'notation') {
-    renderNotation(host, state, actions);
-    return;
-  }
-
-  if (!state.agents.length) {
-    host.innerHTML = `<div class="empty-state">Ajoutez d'abord un vendeur dans l'onglet « Équipe &amp; Points de vente ».</div>`;
-    if (showNewButton) wrap.querySelector('#btnNewObjective').disabled = true;
-    return;
-  }
-
-  wrap.querySelector('#btnNewObjective').addEventListener('click', () => {
-    openObjectiveSheet(state, actions, {
-      agentId: state.agents[0].id,
-      year: ui.year,
-      monthIndex0: ui.month,
-    });
-  });
-
-  if (ui.subTab === 'historique') renderHistorique(host, state, actions);
-  else renderSuivi(host, state, actions);
-}
-
-// ---------- Sous-onglet : Suivi du mois ----------
-
-function renderSuivi(host, state, actions) {
-  host.innerHTML = `
     <div class="toolbar">
       <label class="field">Année
         <select id="fYear"></select>
@@ -82,16 +37,30 @@ function renderSuivi(host, state, actions) {
     </div>
     <div id="tableHost"></div>
   `;
+  root.appendChild(wrap);
 
-  const yearSel = host.querySelector('#fYear');
+  if (!state.agents.length) {
+    wrap.querySelector('#tableHost').innerHTML = `<div class="empty-state">Ajoutez d'abord un vendeur dans l'onglet « Équipe &amp; Points de vente ».</div>`;
+    return;
+  }
+
+  wrap.querySelector('#btnNewObjective').addEventListener('click', () => {
+    openObjectiveSheet(state, actions, {
+      agentId: state.agents[0].id,
+      year: ui.year,
+      monthIndex0: ui.month,
+    });
+  });
+
+  const yearSel = wrap.querySelector('#fYear');
   [state.meta.year, ui.year, new Date().getFullYear()]
     .filter((v, i, a) => a.indexOf(v) === i).sort()
     .forEach((y) => addOption(yearSel, y, y, y === ui.year));
 
-  const monthSel = host.querySelector('#fMonth');
+  const monthSel = wrap.querySelector('#fMonth');
   MONTH_NAMES_FR.forEach((m, i) => addOption(monthSel, i, m, i === ui.month));
 
-  const agentSel = host.querySelector('#fAgent');
+  const agentSel = wrap.querySelector('#fAgent');
   state.agents.forEach((a) => addOption(agentSel, a.id, a.name, a.id === ui.agentId));
 
   yearSel.addEventListener('change', (e) => { ui.year = Number(e.target.value); actions.rerender(); });
@@ -101,14 +70,16 @@ function renderSuivi(host, state, actions) {
   const mKey = monthKey(ui.year, ui.month);
   const rows = listObjectiveRows(state, { agentId: ui.agentId, year: ui.year }).filter((r) => r.mKey === mKey);
 
-  renderTable(host.querySelector('#tableHost'), rows, state, actions, { showActions: true, emptyText: 'Aucun objectif fixé pour ce mois. Cliquez sur « + Nouvel objectif » pour en créer un.' });
+  renderTable(wrap.querySelector('#tableHost'), rows, state, actions, { showActions: true, emptyText: 'Aucun objectif fixé pour ce mois. Cliquez sur « + Nouvel objectif » pour en créer un.' });
 }
 
-// ---------- Sous-onglet : Historique des objectifs ----------
+// ---------- Page : Historique des objectifs ----------
 
-function renderHistorique(host, state, actions) {
-  host.innerHTML = `
-    <p class="page-sub" style="margin-top:-4px">Retrace tous les objectifs assignés à chaque vendeur, tous mois confondus.</p>
+export function renderObjectifsHistorique(root, state, actions) {
+  const wrap = document.createElement('div');
+  wrap.innerHTML = `
+    <h1 class="page-title">Historique des objectifs</h1>
+    <p class="page-sub">Retrace tous les objectifs assignés à chaque vendeur, tous mois confondus.</p>
     <div class="toolbar">
       <label class="field">Vendeur
         <select id="hAgent"><option value="ALL">Tous</option></select>
@@ -119,8 +90,9 @@ function renderHistorique(host, state, actions) {
     </div>
     <div id="tableHost"></div>
   `;
+  root.appendChild(wrap);
 
-  const agentSel = host.querySelector('#hAgent');
+  const agentSel = wrap.querySelector('#hAgent');
   state.agents.forEach((a) => addOption(agentSel, a.id, a.name, a.id === ui.histAgentId));
 
   const years = new Set();
@@ -129,14 +101,14 @@ function renderHistorique(host, state, actions) {
       Object.keys(byMonth).forEach((mKey) => years.add(Number(mKey.slice(0, 4))));
     });
   });
-  const yearSel = host.querySelector('#hYear');
+  const yearSel = wrap.querySelector('#hYear');
   [...years].sort((a, b) => b - a).forEach((y) => addOption(yearSel, y, y, String(y) === String(ui.histYear)));
 
   agentSel.addEventListener('change', (e) => { ui.histAgentId = e.target.value; actions.rerender(); });
   yearSel.addEventListener('change', (e) => { ui.histYear = e.target.value === 'ALL' ? 'ALL' : Number(e.target.value); actions.rerender(); });
 
   const rows = listObjectiveRows(state, { agentId: ui.histAgentId, year: ui.histYear });
-  renderTable(host.querySelector('#tableHost'), rows, state, actions, { showActions: false, showPeriod: true, emptyText: 'Aucun objectif enregistré pour ces filtres.' });
+  renderTable(wrap.querySelector('#tableHost'), rows, state, actions, { showActions: false, showPeriod: true, emptyText: 'Aucun objectif enregistré pour ces filtres.' });
 }
 
 // ---------- Tableau partagé ----------
@@ -267,7 +239,6 @@ function openObjectiveSheet(state, actions, { agentId, year, monthIndex0 }) {
           upsertObjective(s, fAgentId, p.id, fMKey, { objective, weeks, comment });
         });
       });
-      ui.subTab = 'suivi';
       ui.month = Number(monthSel.value);
       closeModal();
     });

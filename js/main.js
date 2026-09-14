@@ -1,9 +1,10 @@
 import { loadState, saveState } from './store.js';
 import { renderDashboard } from './ui-dashboard.js';
 import { renderBilan } from './ui-bilan.js';
-import { renderObjectifs } from './ui-objectifs.js';
+import { renderObjectifsSuivi, renderObjectifsHistorique } from './ui-objectifs.js';
+import { renderEvaluations, renderOutlets } from './ui-notation.js';
 import { renderAbonnements } from './ui-abonnements.js';
-import { renderEquipe } from './ui-equipe.js';
+import { renderEquipeVendeurs, renderEquipePointsDeVente } from './ui-equipe.js';
 import { renderExport } from './ui-export.js';
 import { renderLogin } from './ui-login.js';
 import { isSessionActive, closeSession, getIdentifier } from './auth.js';
@@ -23,9 +24,13 @@ let currentTab = 'dashboard';
 const pages = {
   dashboard: renderDashboard,
   bilan: renderBilan,
-  objectifs: renderObjectifs,
+  'objectifs-suivi': renderObjectifsSuivi,
+  'objectifs-historique': renderObjectifsHistorique,
+  'objectifs-evaluation': renderEvaluations,
+  'objectifs-outlets': renderOutlets,
   abonnements: renderAbonnements,
-  equipe: renderEquipe,
+  'equipe-vendeurs': renderEquipeVendeurs,
+  'equipe-points': renderEquipePointsDeVente,
   export: renderExport,
 };
 
@@ -63,6 +68,11 @@ function goTo(tab) {
   [...tabsEl.querySelectorAll('.tab')].forEach((b) => {
     b.classList.toggle('active', b.dataset.tab === tab);
   });
+  [...tabsEl.querySelectorAll('.side-group')].forEach((g) => {
+    const hasActive = !!g.querySelector(`.tab[data-tab="${tab}"]`);
+    g.classList.toggle('has-active', hasActive);
+    if (hasActive) g.classList.add('open');
+  });
   rerender();
 }
 
@@ -72,6 +82,11 @@ logoutBtn.addEventListener('click', () => {
 });
 
 tabsEl.addEventListener('click', (e) => {
+  const groupToggle = e.target.closest('.side-group-toggle');
+  if (groupToggle) {
+    groupToggle.closest('.side-group').classList.toggle('open');
+    return;
+  }
   const btn = e.target.closest('.tab');
   if (!btn) return;
   goTo(btn.dataset.tab);
