@@ -21,6 +21,12 @@ const logoutBtn = document.getElementById('btnLogout');
 const userAvatar = document.getElementById('userAvatar');
 const userName = document.getElementById('userName');
 const userRole = document.getElementById('userRole');
+const sidebarEl = document.querySelector('.sidebar');
+const sidebarBackdrop = document.getElementById('sidebarBackdrop');
+const menuToggle = document.getElementById('btnMenuToggle');
+
+const INACTIVITY_LIMIT_MS = 30 * 60 * 1000; // déconnexion automatique après 30 min d'inactivité
+let inactivityTimer = null;
 
 let state = loadState();
 let currentTab = 'dashboard';
@@ -44,7 +50,37 @@ const pages = {
 
 const ROLE_LABELS = { admin: 'Administrateur', vendeur: 'Vendeur', outlet: 'Point de vente' };
 
+function closeDrawer() {
+  sidebarEl.classList.remove('open');
+  sidebarBackdrop.classList.remove('open');
+}
+
+function toggleDrawer() {
+  sidebarEl.classList.toggle('open');
+  sidebarBackdrop.classList.toggle('open');
+}
+
+function stopInactivityTimer() {
+  if (inactivityTimer) clearTimeout(inactivityTimer);
+  inactivityTimer = null;
+}
+
+function resetInactivityTimer() {
+  if (!isSessionActive()) return;
+  if (inactivityTimer) clearTimeout(inactivityTimer);
+  inactivityTimer = setTimeout(() => {
+    closeSession();
+    closeDrawer();
+    showLogin();
+  }, INACTIVITY_LIMIT_MS);
+}
+
+['mousedown', 'keydown', 'scroll', 'touchstart', 'click'].forEach((evt) => {
+  document.addEventListener(evt, resetInactivityTimer, { passive: true });
+});
+
 function showLogin() {
+  stopInactivityTimer();
   appRoot.hidden = true;
   loginRoot.hidden = false;
   loginRoot.innerHTML = '';
@@ -55,6 +91,7 @@ function startApp() {
   loginRoot.hidden = true;
   loginRoot.innerHTML = '';
   appRoot.hidden = false;
+  resetInactivityTimer();
   rerender();
 }
 
@@ -108,6 +145,7 @@ function goTo(tab) {
     g.classList.toggle('has-active', hasActive);
     if (hasActive) g.classList.add('open');
   });
+  closeDrawer();
   rerender();
 }
 
@@ -115,6 +153,9 @@ logoutBtn.addEventListener('click', () => {
   closeSession();
   showLogin();
 });
+
+menuToggle.addEventListener('click', toggleDrawer);
+sidebarBackdrop.addEventListener('click', closeDrawer);
 
 tabsEl.addEventListener('click', (e) => {
   const groupToggle = e.target.closest('.side-group-toggle');
