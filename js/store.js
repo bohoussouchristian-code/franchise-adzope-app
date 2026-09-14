@@ -14,9 +14,17 @@ const DEFAULT_PRODUCTS = [
   { id: 'maxit', name: 'Max-it', unit: 'vente', annual: 204, autoFromRegistry: false },
   { id: 'carteoba', name: 'Carte Oba', unit: 'carte', annual: 24, autoFromRegistry: false },
   { id: 'cartevirtoba', name: 'Carte virtuelle OBA', unit: 'carte', annual: 96, autoFromRegistry: false },
-  { id: 'frequentation', name: 'Fréquentation', unit: 'visite', annual: 3120, autoFromRegistry: false },
-  { id: 'clientmystere', name: 'Client mystère', unit: 'visite', annual: 40, autoFromRegistry: false },
-  { id: 'evaluation', name: 'Évaluation', unit: 'point', annual: 120, autoFromRegistry: false },
+];
+
+// Critères de la fiche d'évaluation individuelle (repris du fichier Excel
+// d'origine), chacun noté de 0 à 3.
+const EVAL_CRITERIA = [
+  'Assiduité et ponctualité au travail',
+  'Respect de sa hiérarchie',
+  "Dynamisme dans l'exercice des tâches",
+  'Esprit de créativité',
+  "Générateur d'idées pour le progrès",
+  'Polyvalence',
 ];
 
 const DEFAULT_OUTLETS = [
@@ -36,6 +44,7 @@ function defaultState() {
     products,
     objectives: {}, // [agentId][productId][monthKey] = { objective, weeks: [w1,w2,w3,w4] }
     subscriptions4gHome: [], // registre détaillé 4G Home
+    ratings: { evaluations: {}, frequentation: {}, clientMystere: {} },
   };
 }
 
@@ -58,6 +67,8 @@ export function loadState() {
   return state;
 }
 
+const RETIRED_PRODUCT_IDS = ['frequentation', 'clientmystere', 'evaluation'];
+
 function migrateState(s) {
   if (!s.meta) s.meta = { franchiseName: 'TEAM FRANCHISE ADZOPE', city: 'Adzopé', year: new Date().getFullYear() };
   if (!s.agents) s.agents = [];
@@ -65,6 +76,17 @@ function migrateState(s) {
   if (!s.products) s.products = DEFAULT_PRODUCTS.map((p) => ({ ...p }));
   if (!s.objectives) s.objectives = {};
   if (!s.subscriptions4gHome) s.subscriptions4gHome = [];
+  if (!s.ratings) s.ratings = {};
+  if (!s.ratings.evaluations) s.ratings.evaluations = {};
+  if (!s.ratings.frequentation) s.ratings.frequentation = {};
+  if (!s.ratings.clientMystere) s.ratings.clientMystere = {};
+
+  // Fréquentation, Client mystère et Évaluation quittent la fiche d'objectifs
+  // par produit pour le sous-module Notation (par point de vente / par vendeur).
+  s.products = s.products.filter((p) => !RETIRED_PRODUCT_IDS.includes(p.id));
+  Object.values(s.objectives).forEach((byProduct) => {
+    RETIRED_PRODUCT_IDS.forEach((pid) => delete byProduct[pid]);
+  });
 }
 
 export function saveState(s) {
@@ -301,4 +323,115 @@ export function removeSubscription(s, id) {
   s.subscriptions4gHome = s.subscriptions4gHome.filter((r) => r.id !== id);
 }
 
-export { DEFAULT_PRODUCTS };
+// ---------- Notation : évaluation des vendeurs ----------
+
+export function getEvaluationEntry(s, agentId, mKey, createIfMissing = false) {
+  const bucket = s.ratings.evaluations;
+  if (!bucket[agentId]) {
+    if (!createIfMissing) return null;
+    bucket[agentId] = {};
+  }
+  if (!bucket[agentId][mKey]) {
+    if (!createIfMissing) return null;
+    bucket[agentId][mKey] = { criteria: EVAL_CRITERIA.map(() => 0), objective: EVAL_CRITERIA.length * 3, comment: '' };
+  }
+  return bucket[agentId][mKey];
+}
+
+export function upsertEvaluation(s, agentId, mKey, { criteria, objective, comment }) {
+  const e = getEvaluationEntry(s, agentId, mKey, true);
+  e.criteria = EVAL_CRITERIA.map((_, i) => Math.max(0, Math.min(3, Number(criteria[i]) || 0)));
+  e.objective = Number(objective) || EVAL_CRITERIA.length * 3;
+  e.comment = comment || '';
+}
+
+export function removeEvaluationEntry(s, agentId, mKey) {
+  if (s.ratings.evaluations[agentId]) delete s.ratings.evaluations[agentId][mKey];
+}
+
+export function evaluationTotal(entry) {
+  return entry.criteria.reduce((a, b) => a + b, 0);
+}
+
+export function listEvaluationRows(s, filters = {}) {
+  const { agentId = 'ALL', year = 'ALL' } = filters;
+  const rows = [];
+  for (const aId of Object.keys(s.ratings.evaluations)) {
+    if (agentId !== 'ALL' && aId !== agentId) continue;
+    const agent = s.agents.find((a) => a.id === aId);
+    for (const mKey of Object.keys(s.ratings.evaluations[aId])) {
+      const { year: y, monthIndex0 } = parseMonthKey(mKey);
+      if (year !== 'ALL' && y !== Number(year)) continue;
+      const entry = s.ratings.evaluations[aId][mKey];
+      const total = evaluationTotal(entry);
+      rows.push({
+        agentId: aId,
+        agentName: agent ? agent.name : '(vendeur supprimé)',
+        mKey, year: y, monthIndex0,
+        criteria: entry.criteria,
+        objective: entry.objective,
+        total,
+        gap: total - entry.objective,
+        pct: entry.objective > 0 ? total / entry.objective : null,
+        comment: entry.comment || '',
+      });
+    }
+  }
+  rows.sort((a, b) => b.mKey.localeCompare(a.mKey) || a.agentName.localeCompare(b.agentName));
+  return rows;
+}
+
+// ---------- Notation : fréquentation & client mystère (par point de vente) ----------
+
+export function getOutletMetricEntry(s, kind, outletId, mKey, createIfMissing = false) {
+  const bucket = s.ratings[kind];
+  if (!bucket[outletId]) {
+    if (!createIfMissing) return null;
+    bucket[outletId] = {};
+  }
+  if (!bucket[outletId][mKey]) {
+    if (!createIfMissing) return null;
+    bucket[outletId][mKey] = { objective: 0, realized: 0, comment: '' };
+  }
+  return bucket[outletId][mKey];
+}
+
+export function upsertOutletMetric(s, kind, outletId, mKey, { objective, realized, comment }) {
+  const e = getOutletMetricEntry(s, kind, outletId, mKey, true);
+  e.objective = Number(objective) || 0;
+  e.realized = Number(realized) || 0;
+  e.comment = comment || '';
+}
+
+export function removeOutletMetricEntry(s, kind, outletId, mKey) {
+  if (s.ratings[kind][outletId]) delete s.ratings[kind][outletId][mKey];
+}
+
+export function listOutletMetricRows(s, kind, filters = {}) {
+  const { outletId = 'ALL', year = 'ALL' } = filters;
+  const rows = [];
+  for (const oId of Object.keys(s.ratings[kind])) {
+    if (outletId !== 'ALL' && oId !== outletId) continue;
+    const outlet = s.outlets.find((o) => o.id === oId);
+    for (const mKey of Object.keys(s.ratings[kind][oId])) {
+      const { year: y, monthIndex0 } = parseMonthKey(mKey);
+      if (year !== 'ALL' && y !== Number(year)) continue;
+      const entry = s.ratings[kind][oId][mKey];
+      const gap = entry.realized - entry.objective;
+      const pct = entry.objective > 0 ? entry.realized / entry.objective : null;
+      rows.push({
+        outletId: oId,
+        outletName: outlet ? outlet.name : '(point de vente supprimé)',
+        mKey, year: y, monthIndex0,
+        objective: entry.objective,
+        realized: entry.realized,
+        gap, pct,
+        comment: entry.comment || '',
+      });
+    }
+  }
+  rows.sort((a, b) => b.mKey.localeCompare(a.mKey) || a.outletName.localeCompare(b.outletName));
+  return rows;
+}
+
+export { DEFAULT_PRODUCTS, EVAL_CRITERIA };

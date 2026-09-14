@@ -1,9 +1,10 @@
 import { MONTH_NAMES_FR, monthKey, fmtNum, fmtPct, pctClass, escapeHtml } from './utils.js';
 import { getObjectiveEntry, upsertObjective, removeObjectiveEntry, listObjectiveRows } from './store.js';
 import { openModal, closeModal } from './modal.js';
+import { renderNotation } from './ui-notation.js';
 
 let ui = {
-  subTab: 'suivi', // 'suivi' | 'historique'
+  subTab: 'suivi', // 'suivi' | 'historique' | 'notation'
   year: null,
   month: new Date().getMonth(),
   agentId: 'ALL',
@@ -13,6 +14,7 @@ let ui = {
 
 export function renderObjectifs(root, state, actions) {
   if (ui.year === null) ui.year = state.meta.year;
+  const showNewButton = ui.subTab !== 'notation';
 
   const wrap = document.createElement('div');
   wrap.innerHTML = `
@@ -21,21 +23,33 @@ export function renderObjectifs(root, state, actions) {
         <h1 class="page-title">Objectifs</h1>
         <p class="page-sub">Fixez l'objectif d'un vendeur et suivez sa progression.</p>
       </div>
-      <button class="btn btn-primary" id="btnNewObjective">+ Nouvel objectif</button>
+      ${showNewButton ? '<button class="btn btn-primary" id="btnNewObjective">+ Nouvel objectif</button>' : ''}
     </div>
 
     <div class="subtabs">
       <button class="subtab-btn ${ui.subTab === 'suivi' ? 'active' : ''}" data-subtab="suivi">Suivi du mois</button>
       <button class="subtab-btn ${ui.subTab === 'historique' ? 'active' : ''}" data-subtab="historique">Historique des objectifs</button>
+      <button class="subtab-btn ${ui.subTab === 'notation' ? 'active' : ''}" data-subtab="notation">Notation</button>
     </div>
 
     <div id="subtabHost"></div>
   `;
   root.appendChild(wrap);
 
+  wrap.querySelectorAll('.subtab-btn').forEach((b) => {
+    b.addEventListener('click', () => { ui.subTab = b.dataset.subtab; actions.rerender(); });
+  });
+
+  const host = wrap.querySelector('#subtabHost');
+
+  if (ui.subTab === 'notation') {
+    renderNotation(host, state, actions);
+    return;
+  }
+
   if (!state.agents.length) {
-    wrap.querySelector('#subtabHost').innerHTML = `<div class="empty-state">Ajoutez d'abord un vendeur dans l'onglet « Équipe &amp; Points de vente ».</div>`;
-    wrap.querySelector('#btnNewObjective').disabled = true;
+    host.innerHTML = `<div class="empty-state">Ajoutez d'abord un vendeur dans l'onglet « Équipe &amp; Points de vente ».</div>`;
+    if (showNewButton) wrap.querySelector('#btnNewObjective').disabled = true;
     return;
   }
 
@@ -46,11 +60,7 @@ export function renderObjectifs(root, state, actions) {
       monthIndex0: ui.month,
     });
   });
-  wrap.querySelectorAll('.subtab-btn').forEach((b) => {
-    b.addEventListener('click', () => { ui.subTab = b.dataset.subtab; actions.rerender(); });
-  });
 
-  const host = wrap.querySelector('#subtabHost');
   if (ui.subTab === 'historique') renderHistorique(host, state, actions);
   else renderSuivi(host, state, actions);
 }
@@ -210,7 +220,6 @@ function renderTable(host, rows, state, actions, { showActions, showPeriod, empt
 // ---------- Formulaire "+ Nouvel objectif" : une fiche, tous les produits, un vendeur ----------
 
 function openObjectiveSheet(state, actions, { agentId, year, monthIndex0 }) {
-  const years = [state.meta.year, new Date().getFullYear(), new Date().getFullYear() + 1].filter((v, i, a) => a.indexOf(v) === i).sort();
   const agent = state.agents.find((a) => a.id === agentId) || state.agents[0];
 
   openModal(`
@@ -220,9 +229,6 @@ function openObjectiveSheet(state, actions, { agentId, year, monthIndex0 }) {
     <div class="form-grid sheet-context">
       <label class="field">Vendeur
         <select id="sheetAgent">${state.agents.map((a) => `<option value="${a.id}" ${a.id === agent.id ? 'selected' : ''}>${escapeHtml(a.name)}</option>`).join('')}</select>
-      </label>
-      <label class="field">Année
-        <select id="sheetYear">${years.map((y) => `<option value="${y}" ${y === year ? 'selected' : ''}>${y}</option>`).join('')}</select>
       </label>
       <label class="field">Mois
         <select id="sheetMonth">${MONTH_NAMES_FR.map((m, i) => `<option value="${i}" ${i === monthIndex0 ? 'selected' : ''}>${m}</option>`).join('')}</select>
@@ -240,12 +246,10 @@ function openObjectiveSheet(state, actions, { agentId, year, monthIndex0 }) {
     modalEl.querySelector('#btnCancel').addEventListener('click', closeModal);
 
     const agentSel = modalEl.querySelector('#sheetAgent');
-    const yearSel = modalEl.querySelector('#sheetYear');
     const monthSel = modalEl.querySelector('#sheetMonth');
 
-    const refresh = () => fillSheetProducts(modalEl.querySelector('#sheetProducts'), state, agentSel.value, Number(yearSel.value), Number(monthSel.value));
+    const refresh = () => fillSheetProducts(modalEl.querySelector('#sheetProducts'), state, agentSel.value, year, Number(monthSel.value));
     agentSel.addEventListener('change', refresh);
-    yearSel.addEventListener('change', refresh);
     monthSel.addEventListener('change', refresh);
     refresh();
 
@@ -253,7 +257,7 @@ function openObjectiveSheet(state, actions, { agentId, year, monthIndex0 }) {
       e.preventDefault();
       const fd = new FormData(e.target);
       const fAgentId = agentSel.value;
-      const fMKey = monthKey(Number(yearSel.value), Number(monthSel.value));
+      const fMKey = monthKey(year, Number(monthSel.value));
 
       actions.commit((s) => {
         s.products.forEach((p) => {
@@ -264,7 +268,6 @@ function openObjectiveSheet(state, actions, { agentId, year, monthIndex0 }) {
         });
       });
       ui.subTab = 'suivi';
-      ui.year = Number(yearSel.value);
       ui.month = Number(monthSel.value);
       closeModal();
     });

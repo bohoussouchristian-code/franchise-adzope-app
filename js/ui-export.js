@@ -1,5 +1,5 @@
 import { MONTH_NAMES_FR, monthKey, fmtNum, escapeHtml } from './utils.js';
-import { computeProductMonth, computeProductPeriod, getObjectiveEntry, addSubscription, resetState } from './store.js';
+import { computeProductMonth, computeProductPeriod, getObjectiveEntry, addSubscription, resetState, listEvaluationRows, listOutletMetricRows, EVAL_CRITERIA } from './store.js';
 import { findHeaderRow, buildColumnMap, parseSubscriptionRows } from './import-parser.js';
 import { verifyPassword, changePassword, getIdentifier } from './auth.js';
 
@@ -179,6 +179,42 @@ function exportXlsx(state) {
     }));
   const wsSubs = XLSX.utils.json_to_sheet(subRows);
   XLSX.utils.book_append_sheet(wb, wsSubs, 'Abonnements 4G Home');
+
+  // Feuille Évaluations (Notation, par vendeur)
+  const evalRows = listEvaluationRows(state, { year: state.meta.year }).map((r) => {
+    const row = {
+      Vendeur: r.agentName,
+      Mois: MONTH_NAMES_FR[r.monthIndex0],
+    };
+    EVAL_CRITERIA.forEach((label, i) => { row[label] = r.criteria[i]; });
+    row.Total = r.total;
+    row.Objectif = r.objective;
+    row.GAP = r.gap;
+    row['%'] = r.pct === null ? '' : Math.round(r.pct * 100) + '%';
+    row.Commentaire = r.comment;
+    return row;
+  });
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(evalRows), 'Évaluations');
+
+  // Feuille Fréquentation & Client mystère (Notation, par point de vente)
+  const freqByKey = new Map(listOutletMetricRows(state, 'frequentation', { year: state.meta.year }).map((r) => [`${r.outletId}|${r.mKey}`, r]));
+  const cmByKey = new Map(listOutletMetricRows(state, 'clientMystere', { year: state.meta.year }).map((r) => [`${r.outletId}|${r.mKey}`, r]));
+  const outletKeys = new Set([...freqByKey.keys(), ...cmByKey.keys()]);
+  const outletRows = [...outletKeys].map((key) => {
+    const f = freqByKey.get(key);
+    const c = cmByKey.get(key);
+    const ref = f || c;
+    return {
+      'Point de vente': ref.outletName,
+      Mois: MONTH_NAMES_FR[ref.monthIndex0],
+      'Fréq. objectif': f ? f.objective : '',
+      'Fréq. réalisé': f ? f.realized : '',
+      'Client mystère objectif': c ? c.objective : '',
+      'Client mystère réalisé': c ? c.realized : '',
+      Commentaire: (f && f.comment) || (c && c.comment) || '',
+    };
+  });
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(outletRows), 'Notation points de vente');
 
   XLSX.writeFile(wb, `Suivi_${state.meta.franchiseName.replace(/\s+/g, '_')}_${state.meta.year}.xlsx`);
 }
