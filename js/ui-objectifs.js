@@ -1,5 +1,5 @@
 import { MONTH_NAMES_FR, monthKey, fmtNum, fmtPct, pctClass, escapeHtml } from './utils.js';
-import { upsertObjective, removeObjectiveEntry, listObjectiveRows } from './store.js';
+import { getObjectiveEntry, upsertObjective, removeObjectiveEntry, listObjectiveRows } from './store.js';
 import { openModal, closeModal } from './modal.js';
 
 let ui = {
@@ -39,7 +39,13 @@ export function renderObjectifs(root, state, actions) {
     return;
   }
 
-  wrap.querySelector('#btnNewObjective').addEventListener('click', () => openObjectiveForm(state, actions, null));
+  wrap.querySelector('#btnNewObjective').addEventListener('click', () => {
+    openObjectiveSheet(state, actions, {
+      agentId: state.agents[0].id,
+      year: ui.year,
+      monthIndex0: ui.month,
+    });
+  });
   wrap.querySelectorAll('.subtab-btn').forEach((b) => {
     b.addEventListener('click', () => { ui.subTab = b.dataset.subtab; actions.rerender(); });
   });
@@ -171,8 +177,8 @@ function renderTable(host, rows, state, actions, { showActions, showPeriod, empt
       <td class="muted">${escapeHtml(r.comment) || '—'}</td>
       ${showActions ? `
         <td>
-          <button class="btn btn-sm" data-edit="${r.agentId}|${r.productId}|${r.mKey}">Modifier</button>
-          <button class="btn btn-sm btn-danger" data-del="${r.agentId}|${r.productId}|${r.mKey}">Suppr.</button>
+          <button class="btn btn-sm" data-edit="${r.agentId}|${r.productId}|${r.mKey}" title="Modifier la fiche complète de ce vendeur pour ce mois">Modifier la fiche</button>
+          <button class="btn btn-sm btn-danger" data-del="${r.agentId}|${r.productId}|${r.mKey}" title="Supprimer uniquement cette ligne (${escapeHtml(r.productName)})">Suppr. ce produit</button>
         </td>
       ` : ''}
     `;
@@ -184,9 +190,9 @@ function renderTable(host, rows, state, actions, { showActions, showPeriod, empt
       const editKey = e.target.dataset.edit;
       const delKey = e.target.dataset.del;
       if (editKey) {
-        const [agentId, productId, mKey] = editKey.split('|');
-        const row = rows.find((r) => r.agentId === agentId && r.productId === productId && r.mKey === mKey);
-        openObjectiveForm(state, actions, row);
+        const [agentId, , mKey] = editKey.split('|');
+        const row = rows.find((r) => r.agentId === agentId && r.mKey === mKey);
+        openObjectiveSheet(state, actions, { agentId, year: row.year, monthIndex0: row.monthIndex0 });
       } else if (delKey) {
         const [agentId, productId, mKey] = delKey.split('|');
         if (confirm('Supprimer cet objectif ?')) {
@@ -201,99 +207,94 @@ function renderTable(host, rows, state, actions, { showActions, showPeriod, empt
   host.appendChild(box);
 }
 
-// ---------- Formulaire modal "+ Nouvel objectif" ----------
+// ---------- Formulaire "+ Nouvel objectif" : une fiche, tous les produits, un vendeur ----------
 
-function openObjectiveForm(state, actions, existingRow) {
-  const isEdit = !!existingRow;
+function openObjectiveSheet(state, actions, { agentId, year, monthIndex0 }) {
   const years = [state.meta.year, new Date().getFullYear(), new Date().getFullYear() + 1].filter((v, i, a) => a.indexOf(v) === i).sort();
-
-  const agentId = isEdit ? existingRow.agentId : (state.agents[0] && state.agents[0].id);
-  const productId = isEdit ? existingRow.productId : state.products[0].id;
-  const year = isEdit ? existingRow.year : ui.year;
-  const monthIndex0 = isEdit ? existingRow.monthIndex0 : ui.month;
-  const objective = isEdit ? existingRow.objective : 0;
-  const weeks = isEdit ? existingRow.weeks : [0, 0, 0, 0];
-  const comment = isEdit ? existingRow.comment : '';
-  const product = state.products.find((p) => p.id === productId);
-
-  const agentField = isEdit
-    ? `<div class="obj-locked">${escapeHtml(existingRow.agentName)}</div><input type="hidden" name="agentId" value="${agentId}">`
-    : `<select name="agentId">${state.agents.map((a) => `<option value="${a.id}">${escapeHtml(a.name)}</option>`).join('')}</select>`;
-
-  const productField = isEdit
-    ? `<div class="obj-locked">${escapeHtml(existingRow.productName)}</div><input type="hidden" name="productId" value="${productId}">`
-    : `<select name="productId" id="fp_product">${state.products.map((p) => `<option value="${p.id}" data-auto="${p.autoFromRegistry ? '1' : '0'}">${escapeHtml(p.name)}</option>`).join('')}</select>`;
-
-  const yearField = isEdit
-    ? `<div class="obj-locked">${year}</div><input type="hidden" name="year" value="${year}">`
-    : `<select name="year">${years.map((y) => `<option value="${y}" ${y === year ? 'selected' : ''}>${y}</option>`).join('')}</select>`;
-
-  const monthField = isEdit
-    ? `<div class="obj-locked">${MONTH_NAMES_FR[monthIndex0]}</div><input type="hidden" name="monthIndex0" value="${monthIndex0}">`
-    : `<select name="monthIndex0">${MONTH_NAMES_FR.map((m, i) => `<option value="${i}" ${i === monthIndex0 ? 'selected' : ''}>${m}</option>`).join('')}</select>`;
-
-  const isAuto = product && product.autoFromRegistry;
+  const agent = state.agents.find((a) => a.id === agentId) || state.agents[0];
 
   openModal(`
-    <h2>${isEdit ? 'Modifier l’objectif' : 'Nouvel objectif'}</h2>
-    <form id="objForm">
-      <div class="form-grid">
-        <label class="field">Vendeur${agentField}</label>
-        <label class="field">Produit${productField}</label>
-        <label class="field">Année${yearField}</label>
-        <label class="field">Mois${monthField}</label>
-        <label class="field full">Objectif du mois
-          <input type="number" min="0" name="objective" value="${objective}" required>
-        </label>
-        <div class="full obj-weeks-row" id="fp_weeks">
-          ${weeks.map((w, i) => `
-            <div class="obj-week-field">
-              <label>Semaine ${i + 1}</label>
-              <input type="number" min="0" name="week${i}" value="${w}" ${isAuto ? 'disabled' : ''}>
-            </div>
-          `).join('')}
-        </div>
-        <p class="small muted full" id="fp_autoNote" ${isAuto ? '' : 'hidden'}>Ce produit est calculé automatiquement depuis le registre des abonnements 4G Home : les semaines ne sont pas modifiables ici.</p>
-        <label class="field full">Commentaire
-          <textarea name="comment" rows="2" placeholder="Observation, justification d'écart...">${escapeHtml(comment)}</textarea>
-        </label>
-      </div>
+    <h2>Fiche d'objectifs</h2>
+    <p class="small muted" style="margin-top:-8px">Tous les produits pour un même vendeur et un même mois.</p>
+
+    <div class="form-grid sheet-context">
+      <label class="field">Vendeur
+        <select id="sheetAgent">${state.agents.map((a) => `<option value="${a.id}" ${a.id === agent.id ? 'selected' : ''}>${escapeHtml(a.name)}</option>`).join('')}</select>
+      </label>
+      <label class="field">Année
+        <select id="sheetYear">${years.map((y) => `<option value="${y}" ${y === year ? 'selected' : ''}>${y}</option>`).join('')}</select>
+      </label>
+      <label class="field">Mois
+        <select id="sheetMonth">${MONTH_NAMES_FR.map((m, i) => `<option value="${i}" ${i === monthIndex0 ? 'selected' : ''}>${m}</option>`).join('')}</select>
+      </label>
+    </div>
+
+    <form id="sheetForm">
+      <div id="sheetProducts" class="sheet-products"></div>
       <div class="modal-actions">
         <button type="button" class="btn" id="btnCancel">Annuler</button>
-        <button type="submit" class="btn btn-primary">Valider l'objectif</button>
+        <button type="submit" class="btn btn-primary">Valider la fiche</button>
       </div>
     </form>
   `, (modalEl) => {
     modalEl.querySelector('#btnCancel').addEventListener('click', closeModal);
 
-    const productSel = modalEl.querySelector('#fp_product');
-    if (productSel) {
-      productSel.addEventListener('change', () => {
-        const auto = productSel.selectedOptions[0].dataset.auto === '1';
-        modalEl.querySelectorAll('#fp_weeks input').forEach((inp) => { inp.disabled = auto; });
-        modalEl.querySelector('#fp_autoNote').hidden = !auto;
-      });
-    }
+    const agentSel = modalEl.querySelector('#sheetAgent');
+    const yearSel = modalEl.querySelector('#sheetYear');
+    const monthSel = modalEl.querySelector('#sheetMonth');
 
-    modalEl.querySelector('#objForm').addEventListener('submit', (e) => {
+    const refresh = () => fillSheetProducts(modalEl.querySelector('#sheetProducts'), state, agentSel.value, Number(yearSel.value), Number(monthSel.value));
+    agentSel.addEventListener('change', refresh);
+    yearSel.addEventListener('change', refresh);
+    monthSel.addEventListener('change', refresh);
+    refresh();
+
+    modalEl.querySelector('#sheetForm').addEventListener('submit', (e) => {
       e.preventDefault();
       const fd = new FormData(e.target);
-      const fAgentId = fd.get('agentId');
-      const fProductId = fd.get('productId');
-      const fYear = Number(fd.get('year'));
-      const fMonthIndex0 = Number(fd.get('monthIndex0'));
-      const fMKey = monthKey(fYear, fMonthIndex0);
-      const fWeeks = [fd.get('week0') || 0, fd.get('week1') || 0, fd.get('week2') || 0, fd.get('week3') || 0];
-      const fComment = fd.get('comment') || '';
-      const fObjective = fd.get('objective');
+      const fAgentId = agentSel.value;
+      const fMKey = monthKey(Number(yearSel.value), Number(monthSel.value));
 
-      actions.commit((s) => upsertObjective(s, fAgentId, fProductId, fMKey, { objective: fObjective, weeks: fWeeks, comment: fComment }));
+      actions.commit((s) => {
+        s.products.forEach((p) => {
+          const objective = fd.get(`obj_${p.id}`) || 0;
+          const weeks = [0, 1, 2, 3].map((i) => fd.get(`w${i}_${p.id}`) || 0);
+          const comment = fd.get(`c_${p.id}`) || '';
+          upsertObjective(s, fAgentId, p.id, fMKey, { objective, weeks, comment });
+        });
+      });
       ui.subTab = 'suivi';
-      ui.year = fYear;
-      ui.month = fMonthIndex0;
+      ui.year = Number(yearSel.value);
+      ui.month = Number(monthSel.value);
       closeModal();
     });
   });
+}
+
+function fillSheetProducts(host, state, agentId, year, monthIndex0) {
+  const mKey = monthKey(year, monthIndex0);
+  host.innerHTML = state.products.map((p) => {
+    const entry = getObjectiveEntry(state, agentId, p.id, mKey, false) || { objective: 0, weeks: [0, 0, 0, 0], comment: '' };
+    const isAuto = p.autoFromRegistry;
+    return `
+      <div class="sheet-product">
+        <div class="sheet-product-head">
+          <span class="sheet-product-name">${escapeHtml(p.name)}</span>
+          ${isAuto ? '<span class="pill neutral">Auto (registre)</span>' : `<span class="small muted">${escapeHtml(p.unit)}</span>`}
+        </div>
+        <div class="sheet-product-fields">
+          <label>Objectif<input type="number" min="0" name="obj_${p.id}" value="${entry.objective}"></label>
+          <label>Sem.1<input type="number" min="0" name="w0_${p.id}" value="${entry.weeks[0]}" ${isAuto ? 'disabled' : ''}></label>
+          <label>Sem.2<input type="number" min="0" name="w1_${p.id}" value="${entry.weeks[1]}" ${isAuto ? 'disabled' : ''}></label>
+          <label>Sem.3<input type="number" min="0" name="w2_${p.id}" value="${entry.weeks[2]}" ${isAuto ? 'disabled' : ''}></label>
+          <label>Sem.4<input type="number" min="0" name="w3_${p.id}" value="${entry.weeks[3]}" ${isAuto ? 'disabled' : ''}></label>
+        </div>
+        <label class="sheet-comment">Commentaire
+          <textarea name="c_${p.id}" rows="1" placeholder="Observation, justification d'écart...">${escapeHtml(entry.comment)}</textarea>
+        </label>
+      </div>
+    `;
+  }).join('');
 }
 
 function addOption(select, value, label, selected) {

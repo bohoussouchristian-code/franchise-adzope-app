@@ -384,6 +384,8 @@ tr.total-row td { font-weight: 700; background: #fafbfd; }
   box-shadow: 0 20px 60px rgba(0,0,0,.25);
 }
 
+.modal:has(.sheet-products) { max-width: 860px; }
+
 .modal h2 { margin: 0 0 16px 0; font-size: 17px; }
 
 .form-grid {
@@ -577,6 +579,77 @@ tr.total-row td { font-weight: 700; background: #fafbfd; }
   width: 100%;
   text-align: center;
   padding: 7px 4px;
+}
+
+.sheet-context { margin-bottom: 18px; }
+
+.sheet-products {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 50vh;
+  overflow-y: auto;
+  padding-right: 4px;
+  margin-bottom: 4px;
+}
+
+.sheet-product {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sheet-product-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.sheet-product-name { font-weight: 700; font-size: 13.5px; }
+
+.sheet-product-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.sheet-product-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 600;
+  flex: 1 1 90px;
+}
+
+.sheet-product-fields input {
+  width: 100%;
+  padding: 6px 7px;
+  text-align: center;
+}
+
+.sheet-comment {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.sheet-comment textarea {
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 400;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 6px 8px;
+  resize: vertical;
 }
 
 .module-grid {
