@@ -1,5 +1,5 @@
 import { MONTH_NAMES_FR, monthKey, fmtNum, escapeHtml } from './utils.js';
-import { computeProductMonth, computeProductPeriod, getObjectiveEntry, addSubscription, resetState, listEvaluationRows, listOutletMetricRows, EVAL_CRITERIA, smartphoneReste } from './store.js';
+import { computeProductMonth, computeProductPeriod, getObjectiveEntry, addSubscription, resetState, listAgentPerformanceRows, listOutletMetricRows, smartphoneReste } from './store.js';
 import { findHeaderRow, buildColumnMap, parseSubscriptionRows } from './import-parser.js';
 
 let pendingImport = null;
@@ -195,20 +195,15 @@ function exportXlsx(state) {
     }));
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(smpRows), 'Ventes Smartphones');
 
-  // Feuille Évaluations (Notation, par vendeur)
-  const evalRows = listEvaluationRows(state, { year: state.meta.year }).map((r) => {
-    const row = {
-      Vendeur: r.agentName,
-      Mois: MONTH_NAMES_FR[r.monthIndex0],
-    };
-    EVAL_CRITERIA.forEach((label, i) => { row[label] = r.criteria[i]; });
-    row.Total = r.total;
-    row.Objectif = r.objective;
-    row.GAP = r.gap;
-    row['%'] = r.pct === null ? '' : Math.round(r.pct * 100) + '%';
-    row.Commentaire = r.comment;
-    return row;
-  });
+  // Feuille Évaluations (calcul automatique : performance vs objectif, tous produits confondus)
+  const evalRows = listAgentPerformanceRows(state, { year: state.meta.year }).map((r) => ({
+    Vendeur: r.agentName,
+    Mois: MONTH_NAMES_FR[r.monthIndex0],
+    Objectif: r.objective,
+    'Réalisé': r.realized,
+    GAP: r.gap,
+    '%': r.pct === null ? '' : Math.round(r.pct * 100) + '%',
+  }));
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(evalRows), 'Évaluations');
 
   // Feuille Fréquentation & Client mystère (Notation, par point de vente)

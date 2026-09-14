@@ -17,17 +17,6 @@ const DEFAULT_PRODUCTS = [
   { id: 'cartevirtoba', name: 'Carte virtuelle OBA', unit: 'carte', annual: 96, autoFromRegistry: false },
 ];
 
-// Critères de la fiche d'évaluation individuelle (repris du fichier Excel
-// d'origine), chacun noté de 0 à 3.
-const EVAL_CRITERIA = [
-  'Assiduité et ponctualité au travail',
-  'Respect de sa hiérarchie',
-  "Dynamisme dans l'exercice des tâches",
-  'Esprit de créativité',
-  "Générateur d'idées pour le progrès",
-  'Polyvalence',
-];
-
 const DEFAULT_OUTLETS = [
   'EO Adzopé', 'EO Akoupé', 'BT Agou', 'MF Yakassé Attobrou', 'FR Akoupé'
 ];
@@ -47,7 +36,7 @@ function defaultState() {
     subscriptions4gHome: [], // registre détaillé 4G Home
     subscriptionsFibre: [], // registre détaillé Fibre
     salesSmartphones: [], // registre détaillé ventes Smartphones (cash / crédit)
-    ratings: { evaluations: {}, frequentation: {}, clientMystere: {} },
+    ratings: { frequentation: {}, clientMystere: {} },
   };
 }
 
@@ -82,7 +71,6 @@ function migrateState(s) {
   if (!s.subscriptionsFibre) s.subscriptionsFibre = [];
   if (!s.salesSmartphones) s.salesSmartphones = [];
   if (!s.ratings) s.ratings = {};
-  if (!s.ratings.evaluations) s.ratings.evaluations = {};
   if (!s.ratings.frequentation) s.ratings.frequentation = {};
   if (!s.ratings.clientMystere) s.ratings.clientMystere = {};
 
@@ -428,57 +416,57 @@ export function removeSmartphoneSale(s, id) {
   s.salesSmartphones = s.salesSmartphones.filter((r) => r.id !== id);
 }
 
-// ---------- Notation : évaluation des vendeurs ----------
+// ---------- Évaluation automatique des vendeurs (performance vs objectif) ----------
+// Entièrement calculée à partir du module Objectifs : aucune saisie manuelle.
+// Agrège Objectif / Réalisé sur tous les produits pour un vendeur et un mois donnés.
 
-export function getEvaluationEntry(s, agentId, mKey, createIfMissing = false) {
-  const bucket = s.ratings.evaluations;
-  if (!bucket[agentId]) {
-    if (!createIfMissing) return null;
-    bucket[agentId] = {};
-  }
-  if (!bucket[agentId][mKey]) {
-    if (!createIfMissing) return null;
-    bucket[agentId][mKey] = { criteria: EVAL_CRITERIA.map(() => 0), objective: EVAL_CRITERIA.length * 3, comment: '' };
-  }
-  return bucket[agentId][mKey];
+export function computeAgentMonthPerformance(s, agentId, mKey) {
+  let objective = 0;
+  let realized = 0;
+  s.products.forEach((p) => {
+    const r = computeProductMonth(s, agentId, p.id, mKey);
+    objective += r.objective;
+    realized += r.realized;
+  });
+  const gap = realized - objective;
+  const pct = objective > 0 ? realized / objective : (realized > 0 ? Infinity : null);
+  return { objective, realized, gap, pct };
 }
 
-export function upsertEvaluation(s, agentId, mKey, { criteria, objective, comment }) {
-  const e = getEvaluationEntry(s, agentId, mKey, true);
-  e.criteria = EVAL_CRITERIA.map((_, i) => Math.max(0, Math.min(3, Number(criteria[i]) || 0)));
-  e.objective = Number(objective) || EVAL_CRITERIA.length * 3;
-  e.comment = comment || '';
-}
-
-export function removeEvaluationEntry(s, agentId, mKey) {
-  if (s.ratings.evaluations[agentId]) delete s.ratings.evaluations[agentId][mKey];
-}
-
-export function evaluationTotal(entry) {
-  return entry.criteria.reduce((a, b) => a + b, 0);
-}
-
-export function listEvaluationRows(s, filters = {}) {
+// Liste la performance mensuelle de chaque vendeur ayant au moins un
+// objectif fixé sur un produit ce mois-là (même logique de filtrage que
+// listObjectiveRows, pour rester cohérent avec le reste de l'application).
+export function listAgentPerformanceRows(s, filters = {}) {
   const { agentId = 'ALL', year = 'ALL' } = filters;
-  const rows = [];
-  for (const aId of Object.keys(s.ratings.evaluations)) {
+  const monthsByAgent = new Map();
+  for (const aId of Object.keys(s.objectives)) {
     if (agentId !== 'ALL' && aId !== agentId) continue;
+    for (const pId of Object.keys(s.objectives[aId])) {
+      for (const mKey of Object.keys(s.objectives[aId][pId])) {
+        const entry = s.objectives[aId][pId][mKey];
+        const hasData = entry.objective || entry.weeks.some((w) => w) || entry.comment;
+        if (!hasData) continue;
+        if (!monthsByAgent.has(aId)) monthsByAgent.set(aId, new Set());
+        monthsByAgent.get(aId).add(mKey);
+      }
+    }
+  }
+
+  const rows = [];
+  for (const [aId, mKeys] of monthsByAgent) {
     const agent = s.agents.find((a) => a.id === aId);
-    for (const mKey of Object.keys(s.ratings.evaluations[aId])) {
+    for (const mKey of mKeys) {
       const { year: y, monthIndex0 } = parseMonthKey(mKey);
       if (year !== 'ALL' && y !== Number(year)) continue;
-      const entry = s.ratings.evaluations[aId][mKey];
-      const total = evaluationTotal(entry);
+      const perf = computeAgentMonthPerformance(s, aId, mKey);
       rows.push({
         agentId: aId,
         agentName: agent ? agent.name : '(vendeur supprimé)',
         mKey, year: y, monthIndex0,
-        criteria: entry.criteria,
-        objective: entry.objective,
-        total,
-        gap: total - entry.objective,
-        pct: entry.objective > 0 ? total / entry.objective : null,
-        comment: entry.comment || '',
+        objective: perf.objective,
+        realized: perf.realized,
+        gap: perf.gap,
+        pct: perf.pct,
       });
     }
   }
@@ -539,4 +527,4 @@ export function listOutletMetricRows(s, kind, filters = {}) {
   return rows;
 }
 
-export { DEFAULT_PRODUCTS, EVAL_CRITERIA };
+export { DEFAULT_PRODUCTS };

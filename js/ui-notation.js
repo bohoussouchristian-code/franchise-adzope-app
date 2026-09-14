@@ -1,9 +1,11 @@
 import { MONTH_NAMES_FR, monthKey, fmtNum, fmtPct, pctClass, escapeHtml } from './utils.js';
 import {
-  EVAL_CRITERIA, getEvaluationEntry, upsertEvaluation, removeEvaluationEntry, listEvaluationRows,
+  listAgentPerformanceRows,
   getOutletMetricEntry, upsertOutletMetric, removeOutletMetricEntry, listOutletMetricRows,
 } from './store.js';
 import { openModal, closeModal } from './modal.js';
+
+const APPRECIATION_LABELS = { good: 'Excellent', warn: 'Satisfaisant', bad: 'Insuffisant', neutral: '—' };
 
 let ui = {
   year: null,
@@ -12,7 +14,7 @@ let ui = {
   outletId: 'ALL',
 };
 
-// ---------- Évaluation des vendeurs ----------
+// ---------- Évaluation des vendeurs (automatique : performance vs objectif) ----------
 
 export function renderEvaluations(host, state, actions) {
   if (ui.year === null) ui.year = state.meta.year;
@@ -28,13 +30,8 @@ export function renderEvaluations(host, state, actions) {
   }
 
   host.innerHTML = `
-    <div class="page-head-row">
-      <div>
-        <h1 class="page-title">Évaluation des vendeurs</h1>
-        <p class="page-sub">Notation individuelle (assiduité, hiérarchie, dynamisme...), séparée des objectifs commerciaux.</p>
-      </div>
-      ${isVendeur ? '' : '<button class="btn btn-primary" id="btnNewEval">+ Nouvelle évaluation</button>'}
-    </div>
+    <h1 class="page-title">Évaluation des vendeurs</h1>
+    <p class="page-sub">Calculée automatiquement à partir des performances par rapport aux objectifs fixés (module Objectifs) — aucune saisie manuelle.</p>
     <div class="toolbar">
       <label class="field">Mois
         <select id="fMonth"></select>
@@ -55,18 +52,14 @@ export function renderEvaluations(host, state, actions) {
     const agentSel = host.querySelector('#fAgent');
     state.agents.forEach((a) => addOption(agentSel, a.id, a.name, a.id === ui.agentId));
     agentSel.addEventListener('change', (e) => { ui.agentId = e.target.value; actions.rerender(); });
-
-    host.querySelector('#btnNewEval').addEventListener('click', () => {
-      openEvaluationForm(state, actions, { agentId: state.agents[0].id, monthIndex0: ui.month });
-    });
   }
 
   const mKey = monthKey(ui.year, ui.month);
-  const rows = listEvaluationRows(state, { agentId: ui.agentId, year: ui.year }).filter((r) => r.mKey === mKey);
-  renderEvalTable(host.querySelector('#tableHost'), rows, state, actions, { readOnly: isVendeur });
+  const rows = listAgentPerformanceRows(state, { agentId: ui.agentId, year: ui.year }).filter((r) => r.mKey === mKey);
+  renderEvalTable(host.querySelector('#tableHost'), rows);
 }
 
-function renderEvalTable(host, rows, state, actions, { readOnly } = {}) {
+function renderEvalTable(host, rows) {
   const box = document.createElement('div');
   box.className = 'table-wrap';
   const table = document.createElement('table');
@@ -74,12 +67,11 @@ function renderEvalTable(host, rows, state, actions, { readOnly } = {}) {
     <thead>
       <tr>
         <th>Vendeur</th>
-        <th>Total</th>
         <th>Objectif</th>
+        <th>Réalisé</th>
         <th>GAP</th>
         <th>%</th>
-        <th>Commentaire</th>
-        ${readOnly ? '' : '<th></th>'}
+        <th>Appréciation</th>
       </tr>
     </thead>
     <tbody></tbody>
@@ -88,7 +80,7 @@ function renderEvalTable(host, rows, state, actions, { readOnly } = {}) {
 
   if (!rows.length) {
     const colCount = table.querySelectorAll('thead th').length;
-    tbody.innerHTML = `<tr class="table-empty-row"><td colspan="${colCount}">Aucune évaluation pour ce mois.</td></tr>`;
+    tbody.innerHTML = `<tr class="table-empty-row"><td colspan="${colCount}">Aucun objectif fixé pour ce mois : rien à évaluer.</td></tr>`;
     box.appendChild(table);
     host.innerHTML = '';
     host.appendChild(box);
@@ -100,112 +92,18 @@ function renderEvalTable(host, rows, state, actions, { readOnly } = {}) {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td><span class="badge-agent">${escapeHtml(r.agentName)}</span></td>
-      <td class="right"><b>${fmtNum(r.total)}</b></td>
       <td class="right">${fmtNum(r.objective)}</td>
+      <td class="right"><b>${fmtNum(r.realized)}</b></td>
       <td class="right">${r.gap >= 0 ? '+' : ''}${fmtNum(r.gap)}</td>
       <td><span class="pill ${cls}">${fmtPct(r.pct)}</span></td>
-      <td class="muted">${escapeHtml(r.comment) || '—'}</td>
-      ${readOnly ? '' : `
-      <td>
-        <button class="btn btn-sm" data-edit="${r.agentId}|${r.mKey}">Modifier</button>
-        <button class="btn btn-sm btn-danger" data-del="${r.agentId}|${r.mKey}">Suppr.</button>
-      </td>`}
+      <td><span class="pill ${cls}">${APPRECIATION_LABELS[cls]}</span></td>
     `;
     tbody.appendChild(tr);
   });
 
-  if (!readOnly) {
-    table.addEventListener('click', (e) => {
-      const editKey = e.target.dataset.edit;
-      const delKey = e.target.dataset.del;
-      if (editKey) {
-        const [agentId, mKey] = editKey.split('|');
-        const { monthIndex0 } = rows.find((r) => r.agentId === agentId && r.mKey === mKey);
-        openEvaluationForm(state, actions, { agentId, monthIndex0 });
-      } else if (delKey) {
-        const [agentId, mKey] = delKey.split('|');
-        if (confirm('Supprimer cette évaluation ?')) {
-          actions.commit((s) => removeEvaluationEntry(s, agentId, mKey));
-        }
-      }
-    });
-  }
-
   box.appendChild(table);
   host.innerHTML = '';
   host.appendChild(box);
-}
-
-function openEvaluationForm(state, actions, { agentId, monthIndex0 }) {
-  const mKey = monthKey(ui.year, monthIndex0);
-  const entry = getEvaluationEntry(state, agentId, mKey, false)
-    || { criteria: EVAL_CRITERIA.map(() => 0), objective: EVAL_CRITERIA.length * 3, comment: '' };
-
-  openModal(`
-    <h2>Évaluation du vendeur</h2>
-    <form id="evalForm">
-      <div class="form-grid">
-        <label class="field">Vendeur
-          <select id="evAgent">${state.agents.map((a) => `<option value="${a.id}" ${a.id === agentId ? 'selected' : ''}>${escapeHtml(a.name)}</option>`).join('')}</select>
-        </label>
-        <label class="field">Mois
-          <select id="evMonth">${MONTH_NAMES_FR.map((m, i) => `<option value="${i}" ${i === monthIndex0 ? 'selected' : ''}>${m}</option>`).join('')}</select>
-        </label>
-      </div>
-
-      <div class="eval-criteria" id="evCriteria"></div>
-
-      <div class="form-grid" style="margin-top:12px">
-        <label class="field">Objectif (total sur ${EVAL_CRITERIA.length * 3})
-          <input type="number" min="0" name="objective" value="${entry.objective}">
-        </label>
-      </div>
-      <label class="field" style="margin-top:12px">Commentaire
-        <textarea name="comment" rows="2" placeholder="Observation...">${escapeHtml(entry.comment)}</textarea>
-      </label>
-
-      <div class="modal-actions">
-        <button type="button" class="btn" id="btnCancel">Annuler</button>
-        <button type="submit" class="btn btn-primary">Valider l'évaluation</button>
-      </div>
-    </form>
-  `, (modalEl) => {
-    modalEl.querySelector('#btnCancel').addEventListener('click', closeModal);
-
-    const agentSel = modalEl.querySelector('#evAgent');
-    const monthSel = modalEl.querySelector('#evMonth');
-    const criteriaHost = modalEl.querySelector('#evCriteria');
-
-    const refresh = () => {
-      const mk = monthKey(ui.year, Number(monthSel.value));
-      const e = getEvaluationEntry(state, agentSel.value, mk, false) || { criteria: EVAL_CRITERIA.map(() => 0) };
-      criteriaHost.innerHTML = EVAL_CRITERIA.map((label, i) => `
-        <label class="eval-criterion">
-          <span>${escapeHtml(label)}</span>
-          <select name="crit_${i}">
-            ${[0, 1, 2, 3].map((v) => `<option value="${v}" ${v === (e.criteria[i] || 0) ? 'selected' : ''}>${v}</option>`).join('')}
-          </select>
-        </label>
-      `).join('');
-    };
-    agentSel.addEventListener('change', refresh);
-    monthSel.addEventListener('change', refresh);
-    refresh();
-
-    modalEl.querySelector('#evalForm').addEventListener('submit', (e) => {
-      e.preventDefault();
-      const fd = new FormData(e.target);
-      const fAgentId = agentSel.value;
-      const fMKey = monthKey(ui.year, Number(monthSel.value));
-      const criteria = EVAL_CRITERIA.map((_, i) => fd.get(`crit_${i}`) || 0);
-      const objective = fd.get('objective');
-      const comment = fd.get('comment') || '';
-
-      actions.commit((s) => upsertEvaluation(s, fAgentId, fMKey, { criteria, objective, comment }));
-      ui.month = Number(monthSel.value);
-      closeModal();
-    });
-  });
 }
 
 // ---------- Fréquentation & Client mystère (par point de vente) ----------
